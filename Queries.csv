@@ -1,4 +1,4 @@
-descripcion,metricas,query,Owner
+descripcion,metricas,query,owner
 Delay para notificaciones de Mantika.,"site, execution id, domain, created at date, user timestamp, y batch type","WITH NOTIF AS (
 SELECT 
 a.site_id, 
@@ -10500,7 +10500,7 @@ from total_orders_atribuidas o
 left join total_sent n on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.ratio=n.ratio -- and o.xsell_divider=n.xsell_divider --AND o.hora = n.hora
 
 LEFT JOIN OpR or_
-ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id -- AND o.xsell_divider = or_.xsell_divider",
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id -- AND o.xsell_divider = or_.xsell_divider",Jose
 Cantidad de compras por Item de la Tracks.,"site, domain, product, item, order count","select 
 site, 
 json_value(event_data, '$.items[0].item.domain_id') domain_id,
@@ -10512,4 +10512,4 @@ where ds=current_date()
 and path in ('/orders/ordercreated', '/checkout/congrats')
 and site in ('MLB', 'MLA', 'MLM', 'MLC')
 
-group by 1,2,3,4",
+group by 1,2,3,4",Jose
