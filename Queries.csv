@@ -10513,3 +10513,214 @@ and path in ('/orders/ordercreated', '/checkout/congrats')
 and site in ('MLB', 'MLA', 'MLM', 'MLC')
 
 group by 1,2,3,4",Jose
+Eventos de compra y de delivery en la tracks para MLA en el último mes.,"fecha, buyers, deliveries","select ds,
+count(distinct case when path in ('/orders/ordercreated', '/checkout/congrats') then usr.user_id end) buyers,
+count(distinct case when path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered') then usr.user_id end) deliveries,
+
+from meli-bi-data.MELIDATA.TRACKS
+where site in ('MLA') 
+and bu = 'mercadolibre'
+and ds >= current_date() - 31
+and usr.user_id is not null
+
+group by 1",Jose
+Query para experimento del filtro In / Out de Xsell MLB. Experimento 8 de Pedro.,"site, experiment, exp_8, fecha, week, user relation, users, buyers, orders, gmv test y cg, incremental orders e incremental buyers","-- Parameters
+-- notification_date: '2022-10-21' vs. current_date() - 30
+-- INTERVAL 24 HOUR
+-- current_date() - 30
+-- exp_8: True sii users del experimento que filtra dominios
+
+with OpR AS (
+SELECT
+notification_date,
+sit_site_id,
+campaign_id,
+(MOD(cus_cust_id, 100) >= 30 AND MOD(cus_cust_id, 100) < 65) as exp_8,
+split(execution_id, '')[OFFSET (2)] experiment,
+sum(case when event_type IN ('shown') and platform = '/mobile/android' then 1 else 0 end) shown,
+sum(case when event_type IN ('open') and platform = '/mobile/android' then 1 else 0 end) open,
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+WHERE 1=1
+AND notification_date >= '2022-10-21'
+AND event_type  IN ('shown', 'open')
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND left(execution_id,1) = '2'
+AND platform = '/mobile/android'
+GROUP BY 1, 2, 3, 4, 5),
+ORDERS as
+(
+SELECT cus_cust_id AS user_id,
+(MOD(cus_cust_id, 100) >= 30 AND MOD(cus_cust_id, 100) < 65) as  exp_8,
+-- DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER,
+DATE_ADD(tim_day_winning_time, INTERVAL 24 HOUR) AS FECHA_ORDER,
+SIT_SITE_ID as site_id,
+ord_order_id AS order_id,
+item_id,
+domain_id,
+GMV_USD
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= current_date() - 30
+AND tim_day_winning_date < current_date()
+AND SIT_SITE_ID = 'MLB'
+)
+,NOTIF AS
+(
+SELECT
+split(execution_id, '')[OFFSET (2)] experiment,
+execution_id,
+-- DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+DATE_ADD(user_timestamp, INTERVAL 24 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+(MOD(cus_cust_id, 100) >= 30 AND MOD(cus_cust_id, 100) < 65) as  exp_8,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+domain_id_1,
+domain_id_2,
+domain_id_3,
+domain_id_4,
+domain_id_5,
+batch_type,
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+LEFT JOIN
+(
+SELECT
+CAST(REGEXP_EXTRACT(item1, r'\'domain_id\': \'([A-z]*-[A-z]*)\',') AS STRING) domain_id_1,
+CAST(REGEXP_EXTRACT(item2, r'\'domain_id\': \'([A-z]*-[A-z]*)\',') AS STRING) domain_id_2,
+CAST(REGEXP_EXTRACT(item3, r'\'domain_id\': \'([A-z]*-[A-z]*)\',') AS STRING) domain_id_3,
+CAST(REGEXP_EXTRACT(item4, r'\'domain_id\': \'([A-z]*-[A-z]*)\',') AS STRING) domain_id_4,
+CAST(REGEXP_EXTRACT(item5, r'\'domain_id\': \'([A-z]*-[A-z]*)\',') AS STRING) domain_id_5,
+score_id,
+user_id,
+item1
+FROM `meli-bi-data.SBOX_MANTIKAMARKETING.MARKETING_LOGS_DATA` WHERE
+CAST(created_at AS DATE) >= current_date - 30
+AND ARRAY_LENGTH(SPLIT(score_id, '_')) > 1
+AND left(score_id, 1) = '2'
+) B
+ON  concat(B.score_id, user_id) = concat(a.execution_id, a.cus_cust_id)
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= '2022-10-21'
+AND notification_date < current_date()
+AND sit_site_id  = 'MLB' -- in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) = '2'
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, gmv_usd, experiment, exp_8 --, xsell_divider, --experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.exp_8,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+-- n.batch_credit,
+n.batch_type,
+-- n.xsell_divider,
+n.experiment experiment,
+n.notif_dttm notif_2_day,
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+-- AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+-- ATRIBUCION
+AND o.domain_id IN (domain_id_1, domain_id_2, domain_id_3, domain_id_4, domain_id_5)
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)
+-- AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 4 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+AND n.exp_8 = o.exp_8
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+(
+select
+site_id,
+campaign,
+experiment,
+exp_8,
+-- xsell_divider,
+-- batch_credit,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+-- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_2day_test,
+count(distinct case when batch_type='test' then  order_id  end) orders_2day_test,
+sum(case when batch_type='test' then gmv_usd end) gmv_2day_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_2day_cg,
+count(distinct case when batch_type='cg' then  order_id  end) orders_2day_cg,
+sum(case when batch_type='cg' then gmv_usd end) gmv_2day_cg,
+-- 24 hours
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_test_24,
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  order_id  end) orders_test_24,
+-- sum(case when batch_type='test' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_test_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_cg_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  order_id  end) orders_cg_2,
+-- sum(case when batch_type='cg' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_cg,
+-- 24 hours same domain
+from  orders_atribuidas
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3, 4, 5 --,4--, 5
+)
+,
+total_sent as
+(
+select
+site_id,
+campaign ,
+experiment,
+exp_8,
+-- xsell_divider,
+--batch_credit,
+date(notif_dttm) fecha,
+-- extract(HOUR FROM notif_dttm ) hora,
+count(distinct case when batch_type='test' then  user_id  end) users_test,
+count(distinct case when batch_type='cg' then  user_id  end) users_cg
+from notif
+group by 1,2,3, 4, 5--, 5
+)
+select
+--date_trunc(o.fecha, MONTH) month_notif,
+o.site_id sit_site_id,
+--o.campaign campaign_id,
+o.experiment,
+o.exp_8,
+-- o.xsell_divider,
+o.fecha notification_date,
+date_trunc(o.fecha, week(saturday)) weeks,
+-- o.hora,
+users_test/(users_test+users_cg) user_relation,
+--o.batch_Credit,
+users_test,
+buyers_2day_test,
+orders_2day_test,
+gmv_2day_test,
+users_cg, buyers_2day_cg, orders_2day_cg, gmv_2day_cg,
+--buyers_2day_cg/users_cg cvr_cg, --Conversion Rate CG
+--buyers_2day_test/NULLIF(users_test,0) -buyers_2day_cg / NULLIF(users_cg, 0) lift,
+COALESCE(buyers_2day_test - (buyers_2day_cg * users_test / NULLIF(users_cg, 0)), 0) inc_buyers,
+COALESCE(orders_2day_test - (orders_2day_cg * users_test / NULLIF(users_cg, 0)), 0) inc_orders,
+--CAST(COALESCE(gmv_2day_test - (gmv_2day_cg * users_test / NULLIF(users_cg, 0)), 0) AS FLOAT64) inc_gmv,
+or_.shown,
+or_.open,
+--or_.open/or_.shown open_rate --Open Rate
+from total_orders_atribuidas o
+left join total_sent n
+on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.exp_8 = n.exp_8
+and o.experiment=n.experiment -- and o.xsell_divider=n.xsell_divider --AND o.hora = n.hora
+LEFT JOIN OpR or_
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id AND o.experiment=or_.experiment  and o.exp_8 = or_.exp_8",Pedro
