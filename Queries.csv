@@ -10724,3 +10724,74 @@ on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.exp_8
 and o.experiment=n.experiment -- and o.xsell_divider=n.xsell_divider --AND o.hora = n.hora
 LEFT JOIN OpR or_
 ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id AND o.experiment=or_.experiment  and o.exp_8 = or_.exp_8",Pedro
+Cantidad de Users por Ventana de tiempo de Entrega de su Orden,"date, dias_despues, users","select ds, 
+date_diff(date(user_timestamp), date(date_add(tim_day_winning_time, interval 4 hour)), day) AS dias_despues, 
+count(distinct usr.user_id) users, --path, --event_data,
+--count(distinct case when path in ('/orders/ordercreated', '/checkout/congrats') then usr.user_id end) buyers,
+--count(distinct case when path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered') then usr.user_id end) deliverings,
+
+--cast(json_value(TRACKS.event_data,'$.shipment_id') AS int64) shipment_id,
+--SHP_ORDER_ID,
+--ord.item_id,
+
+from meli-bi-data.MELIDATA.TRACKS
+
+left join `meli-bi-data.WHOWNER.BT_SHP_SHIPMENTS` ships on safe_CAST(JSON_VALUE(TRACKS.event_data,'$.shipment_id') AS int64) = ships.SHP_SHIPMENT_ID
+and ships.SIT_SITE_ID in ('MLA')
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports ord on safe_cast(ships.SHP_ORDER_ID as int64) = ord.ord_order_id
+and ord.SIT_SITE_ID in ('MLA')
+
+
+where site in ('MLA') 
+and bu = 'mercadolibre'
+and ds >= current_date() - 31
+--and ds = current_date() - 31
+and usr.user_id is not null
+and path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered')
+--limit 10
+group by 1,2",
+Cantidad de orders y users por Delivery y ventana de entrega.,"date, dias_despues, users, site, orders, users, llego, raro","select SIT_SITE_ID site, date_order, dias_despues, count(distinct order_id) ordders, count(distinct user_id) users, 
+case when dias_despues is null then False else True end llego,
+case when dias_despues < 0 then True else False end raro,
+
+from 
+(
+select --ds, 
+ord.SIT_SITE_ID,
+date_diff(date(user_timestamp), date(date_add(tim_day_winning_time, interval 4 hour)), day) AS dias_despues, 
+date(TRACKS.user_timestamp) date_deliver, date(date_add(ord.tim_day_winning_time, interval 4 hour)) date_order, 
+ord.ord_order_id order_id, ships.SHP_SHIPMENT_ID ship_id, ord.item_id item_id, ord.cus_cust_id user_id,
+--count(distinct ord.ord_order_id) orders,
+--count(case when distinct ord.ord_order_id) orders,
+--count(distinct usr.user_id) users, --path, --event_data,
+--count(distinct case when path in ('/orders/ordercreated', '/checkout/congrats') then usr.user_id end) buyers,
+--count(distinct case when path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered') then usr.user_id end) deliverings,
+
+--cast(json_value(TRACKS.event_data,'$.shipment_id') AS int64) shipment_id,
+--SHP_ORDER_ID,
+--ord.item_id,
+
+from meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports ord
+
+left join `meli-bi-data.WHOWNER.BT_SHP_SHIPMENTS` ships on safe_cast(ships.SHP_ORDER_ID as int64) = ord.ord_order_id
+and ships.SIT_SITE_ID in ('MLA', 'MLM', 'MLB')
+
+left join meli-bi-data.MELIDATA.TRACKS on safe_CAST(JSON_VALUE(TRACKS.event_data,'$.shipment_id') AS int64) = ships.SHP_SHIPMENT_ID
+and site in ('MLA', 'MLM', 'MLB') 
+and bu = 'mercadolibre'
+and ds >= current_date() - 38
+--and ds <= current_date() - 26
+--and ds = current_date() - 31
+and usr.user_id is not null
+and path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered')
+
+where ord.SIT_SITE_ID in ('MLA', 'MLM', 'MLB')
+AND ord.tim_day_winning_date >= current_date() - 38
+AND ord.tim_day_winning_date <= current_date() - 7
+--and date(TRACKS.user_timestamp) is null
+--limit 10
+--group by 1,2
+)
+
+group by 1,2,3",
