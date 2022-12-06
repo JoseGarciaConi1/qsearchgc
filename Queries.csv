@@ -10750,7 +10750,7 @@ and ds >= current_date() - 31
 and usr.user_id is not null
 and path in ('/notification/shipping_delivered_express_return', '/notification/shipping_delivered_without_express_return', '/notification/shipping_delivered_cart_express_return', '/notification/shipping_delivered_cart_without_express_return', '/notification/shipping_delivered')
 --limit 10
-group by 1,2",
+group by 1,2",Jose
 Cantidad de orders y users por Delivery y ventana de entrega.,"date, dias_despues, users, site, orders, users, llego, raro","select SIT_SITE_ID site, date_order, dias_despues, count(distinct order_id) ordders, count(distinct user_id) users, 
 case when dias_despues is null then False else True end llego,
 case when dias_despues < 0 then True else False end raro,
@@ -10794,7 +10794,7 @@ AND ord.tim_day_winning_date <= current_date() - 7
 --group by 1,2
 )
 
-group by 1,2,3",
+group by 1,2,3",Jose
 Reporte Remarketing por Wording.,"site, wording, fecha, dia, mes, user relation, users, buyers, orders, test y cg, incremental orders e incremental buyers, shown, open, open rate","with OpR AS (
 SELECT 
         notification_date,
@@ -11044,7 +11044,7 @@ and o.wording=n.wording --AND o.hora = n.hora
 
 LEFT JOIN OpR or_
 ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id 
-AND o.wording = or_.wording",
+AND o.wording = or_.wording",Clara
 "Fecha de Compra, Cancelación y Entrega de ordenes. Tipo forenses.","user, fecha order, fecha delivery, fecha cancelación, orden, item, shipment","select user_order, date_order, date_deliv, extract(date from timestamp(date_cancel)) date_cancel, order_order, item_order, shipment_ships,
 --case when date_deliv < extract(date from timestamp(date_cancel)) then 'cancelado_despues' else 'cancelado_antes' end cancelado,
 --count(distinct order_order) ordenes,
@@ -11092,4 +11092,389 @@ AND ord.tim_day_winning_date >= current_date() - 75
 AND ord.tim_day_winning_date <= current_date() - 45)
 
 where order_cancel is not null and path_deliv is not null and 
-date(date_deliv) > extract(date from timestamp(date_cancel))",
+date(date_deliv) > extract(date from timestamp(date_cancel))",Jose
+"Usuarios recurrentes y Tiempo de Atribución en Xsell: Incrementalidad según cantidad de compras que haya hecho el usuario durante los ultimos 3 meses (agosto, septembre y octubre), y tiempo que tardan en comprar desde la notificación en horas.","site, fecha, experimento, batch credit, recc (recurrencia), attrib delay, atribución, notis, users, buyers, orders, test y cg, showns, opens","DECLARE site_value STRING DEFAULT 'MLB';
+DECLARE campana_value STRING DEFAULT 'xsell';
+DECLARE start_date_value TIMESTAMP DEFAULT '2022-11-01 00:00:00';
+DECLARE end_date_value TIMESTAMP DEFAULT '2022-12-02 23:59:59';
+DECLARE attribution_value INT64 DEFAULT 4;
+
+with orders as
+(
+select 
+date_add(tim_day_winning_time, interval 4 hour) AS fecha, 
+sit_site_id as site_id,
+cus_cust_id AS user_id, 
+ord_order_id AS order_id, 
+from  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+where 1=1
+and tim_day_winning_date >= extract(date from start_date_value)
+and tim_day_winning_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+noti as
+(
+select 
+sit_site_id as site_id,
+date_add(user_timestamp, interval 4 hour) as fecha,
+A.cus_cust_id as user_id,
+batch_type grupo,
+execution_id execution_id,
+case when event_type IN ('shown') then execution_id end shown,    
+case when event_type IN ('open') then execution_id end open,
+batch_credit,
+
+case when left(execution_id,1) = '2' then 'xsell'
+when left(execution_id,1) = '0' then 'remarketing'
+when left(execution_id,1) in ('4', '5', '6', '7', '8', '9') then 'resend'
+when left(execution_id,1) in ('1', '3') then 'fuera de cobertura'
+else 'error' end experimento,
+
+rec.recc recc,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+left join (
+select
+cus_cust_id, count(distinct ord_order_id) recc,
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+where tim_day_winning_date >= '2022-08-01' and tim_day_winning_date <= '2022-10-31' and sit_site_id in (site_value)
+group by 1
+) rec on A.cus_cust_id=rec.cus_cust_id
+
+where campaign_id = 'REMARKETING_MANTIKA'
+and event_type in ('sent', 'shown', 'open')
+and left(execution_id, 1) in ('2')
+and notification_date >= extract(date from start_date_value)
+and notification_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+atribucion as
+(
+select * 
+from (select
+noti.site_id site,
+noti.fecha fecha,
+noti.user_id user,
+noti.grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+orders.order_id orders,
+
+case when orders.order_id is not null then date_diff(orders.fecha, noti.fecha, hour) else -1 end attrib,
+
+rank() over (partition by orders.order_id order by noti.fecha desc) as party
+
+from orders inner join noti
+on noti.site_id=orders.site_id
+and noti.user_id=orders.user_id
+and noti.fecha >= date_sub(orders.fecha, interval attribution_value hour)
+and noti.fecha < orders.fecha)
+
+where party=1
+),
+
+todo as
+(
+select
+noti.site_id site,
+noti.fecha fecha,
+noti.user_id user,
+noti.grupo grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+atribucion.orders,
+atribucion.attrib,
+noti.shown,
+noti.open,
+noti.batch_credit,
+noti.recc,
+
+from noti left join atribucion
+on noti.execution_id=atribucion.notificaciones
+)
+
+select
+site,
+extract(date from fecha) fecha,
+experimento,
+batch_credit,
+recc,
+attrib attrib_delay,
+concat(cast(attribution_value as string),'hs') atribucion,
+count(distinct case when grupo='test' then notificaciones end) notificaciones_test,
+count(distinct case when grupo='cg' then notificaciones end) notificaciones_cg,
+count(distinct case when grupo='test' then user end) users_test,
+count(distinct case when grupo='cg' then user end) users_cg,
+count(distinct case when ((orders is not null) and (grupo='test')) then user end) buyers_test,
+count(distinct case when ((orders is not null) and (grupo='cg')) then user end) buyers_cg,
+count(distinct case when grupo='test' then orders end) orders_test,
+count(distinct case when grupo='cg' then orders end) orders_cg,
+count(distinct shown) showns,
+count(distinct open) opens,
+
+-- count(distinct case when grupo='cg' then user end) / count(distinct user) sesgo_cg,
+-- count(distinct shown)/count(distinct case when grupo='test' then notificaciones end) exposure,
+-- count(distinct open)/count(distinct shown) open_rate,
+
+from todo
+where experimento in (campana_value)
+group by 1,2,3,4,5,6",Jose
+Xsell Live. Reporte de Xsell  partir de la Tracks.,"fecha, mod control, users, notis, buyers, orders test y cg, same item, cvr, shown, open, open rate","WITH users AS (
+Select
+ds notification_date, 
+     CASE WHEN path = '/notification/campaigns_generic' THEN 'test'
+        ELSE 'cg' END  as batch_type, 
+CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') end score_id,
+        json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (0)] item_1,
+        json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (1)] item_2,
+        json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (2)] item_3,
+        json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (3)] item_4,
+        json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (4)] item_5,
+CASE WHEN MOD(CAST(usr.user_id AS INT64),100)>=0 AND MOD(CAST(usr.user_id AS INT64),100) <34 THEN ""CLASICO""
+WHEN MOD(CAST(usr.user_id AS INT64),100)>=34 AND MOD(CAST(usr.user_id AS INT64),100) <67 THEN ""CLASICO+DELIVER""
+WHEN MOD(CAST(usr.user_id AS INT64),100)>=67 THEN ""DELIVER""
+END AS   MOD_CONTROL,
+
+usr.user_id user,
+json_value(event_data, '$.event_type') event_type,
+min(DATE_SUB(cast(user_timestamp as timestamp) , INTERVAL 4 hour) )  as ts,
+from `meli-bi-data.MELIDATA.TRACKS`
+WHERE path IN ('/notification/campaigns_generic', '/notification/campaigns_control_group') 
+  AND (ds >= current_date -2)
+  and usr.user_id is not null
+  AND json_value(event_data, '$.communication_id') in ('d3ac7c13-6596-49aa-95c6-03cad2ebc83f',
+                                                                    'b0343141-a319-4452-a50d-143e7d195e65',
+                                                                    'c122e0dd-fce0-4b9b-83bd-744274daaf1f',
+                                                                    '3a9adfe2-5ca2-4060-8b56-c12b0e556de0',
+                                                                    'aa37b710-0f50-4fc1-b372-f49b4bfafbb3',
+                                                                    'eb5988de-7521-4645-bf6f-f6b9fb525236',
+                                                                    '568acdb6-63ab-43b2-8d7b-c6751da88d6a',
+                                                                    '684a8d14-74a5-41e8-ba74-272b2f58ca1a',
+                                                                    '8407f114-44d2-474b-9343-caecb6903520',
+                                                                    '80a40bce-3b49-4b1b-8e28-43789d445a5a',
+                                                                    '17b9b1a2-cb6b-43ec-b029-5f3a84c2e175',
+                                                                    '3e10daf1-91d8-4278-b8d7-9c6bfc516b99',
+                                                                    '49678d7e-7ac1-4a33-a66b-a1fd499697e5',
+                                                                    '294ac549-659e-4fc7-89a6-d344e51d835e')  
+                                                                  
+  AND site IN ('MLM')
+  AND json_value(event_data, '$.event_type')  IN ('sent', 'open', 'shown')
+  AND bu = 'mercadolibre'
+  and left(CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') END, 1) = '2'
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11
+
+            ), bids AS (
+SELECT 
+        ds                                          as notification_date,
+        site                                        as  sit_site_id,
+        cast(usr.user_id  as INT64)                 as CUS_CUST_ID,
+        path,
+        DATE_SUB(cast(A.user_timestamp as timestamp) , INTERVAL 4 hour)   as user_timestamp,
+        coalesce(json_value(event_data, '$.domain_id') ,  
+        json_value(json_extract(json_extract_array(event_data, '$.items')[OFFSET (0)], '$.item'), '$.domain_id')
+        
+        ) domain_id,
+        coalesce(
+        json_value(json_extract(json_extract_array(event_data, '$.items')[OFFSET (0)], '$.item'), '$.id'), 
+        json_value(event_data, '$.item_id')
+        )
+        
+         item_id ,
+         json_value(event_data, '$.order_id') order_id
+FROM meli-bi-data.MELIDATA.TRACKS as A
+    WHERE 1=1
+    AND path IN ('/orders/ordercreated')
+
+        AND ds >= current_date -2
+        AND site IN  ('MLM') --, 'MLA','MLM') -- 'MCO', 'MLM', 'MLU', 'MLC')
+        AND bu = 'mercadolibre'
+        order BY user_timestamp)
+SELECT 
+a.notification_date,MOD_CONTROL,
+COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN a.user END) users_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN a.user END) users_cg,
+
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN a.score_id END) notis_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN a.score_id END) notis_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN b.cus_cust_id END) buyers_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN b.cus_cust_id END) buyers_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN b.order_id END) orders_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN b.order_id END) orders_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.order_id END) orders_sameitem_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.order_id END) orders_sameitem_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.cus_cust_id END) buyers_sameitem_test,
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.cus_cust_id END) buyers_sameitem_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.cus_cust_id END)/
+NULLIF(COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN a.user END), 0)   cvr_same_item_test,
+ 
+ COUNT(DISTINCT CASE WHEN batch_type = 'cg' AND b.item_id IN (item_1, item_2, item_3, item_4, item_5) THEN b.cus_cust_id END)/
+ NULLIF(COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN a.user END), 0) cvr_same_item_cg,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN b.cus_cust_id END)/
+NULLIF(COUNT(DISTINCT CASE WHEN batch_type = 'test' THEN a.user END), 0) cvr_test,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN b.cus_cust_id END)/
+NULLIF(COUNT(DISTINCT CASE WHEN batch_type = 'cg' THEN a.user END), 0) cvr_cg,
+
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND event_type = 'shown' THEN score_id END) shown,
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND event_type = 'open' THEN score_id END) open,
+
+COUNT(DISTINCT CASE WHEN batch_type = 'test' AND event_type = 'open' THEN score_id END) /
+NULLIF(COUNT(DISTINCT CASE WHEN batch_type = 'test' AND event_type = 'shown' THEN score_id END), 0) open_rate,
+
+
+ FROM users a
+LEFT JOIN bids b ON cast(a.user AS INT64) = b.CUS_CUST_ID
+AND ts < user_timestamp
+AND timestamp_add(ts, INTERVAL 4 HOUR) > b.user_timestamp
+GROUP BY 1,2
+-- GROUP BY 1,2,3
+;",Clara
+Atribucion Negativa para Xsell. Se asignan las ordenes del mismo user pero fuera del período de atribución.,"site, fecha, experimento, batch credit, attrib delay, atribucion, notificaciones, users, buyers, orders, test y cg, shown, open","DECLARE site_value STRING DEFAULT 'MLB';
+DECLARE campana_value STRING DEFAULT 'xsell';
+DECLARE start_date_value TIMESTAMP DEFAULT '2022-10-01 00:00:00';
+DECLARE end_date_value TIMESTAMP DEFAULT '2022-10-30 23:59:59';
+DECLARE attribution_value INT64 DEFAULT 48;
+
+with orders as
+(
+select 
+date_add(tim_day_winning_time, interval 4 hour) AS fecha, 
+sit_site_id as site_id,
+cus_cust_id AS user_id, 
+ord_order_id AS order_id, 
+from  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+where 1=1
+and tim_day_winning_date >= extract(date from start_date_value)
+and tim_day_winning_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+noti as
+(
+select 
+sit_site_id as site_id,
+date_add(user_timestamp, interval 4 hour) as fecha,
+A.cus_cust_id as user_id,
+batch_type grupo,
+execution_id execution_id,
+case when event_type IN ('shown') then execution_id end shown,    
+case when event_type IN ('open') then execution_id end open,
+batch_credit,
+
+case when left(execution_id,1) = '2' then 'xsell'
+when left(execution_id,1) = '0' then 'remarketing'
+when left(execution_id,1) in ('4', '5', '6', '7', '8', '9') then 'resend'
+when left(execution_id,1) in ('1', '3') then 'fuera de cobertura'
+else 'error' end experimento,
+
+--rec.recc recc,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+-- left join (
+-- select
+-- cus_cust_id, count(distinct ord_order_id) recc,
+-- FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+-- where tim_day_winning_date >= '2022-08-01' and tim_day_winning_date <= '2022-10-31' and sit_site_id in (site_value)
+-- group by 1
+-- ) rec on A.cus_cust_id=rec.cus_cust_id
+
+where campaign_id = 'REMARKETING_MANTIKA'
+and event_type in ('sent', 'shown', 'open')
+and left(execution_id, 1) in ('2')
+and notification_date >= extract(date from start_date_value)
+and notification_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+atribucion as
+(
+select * 
+from (select
+noti.site_id site,
+noti.fecha fecha,
+orders.fecha fecha_orden,
+noti.user_id user,
+noti.grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+orders.order_id orders,
+
+case when orders.order_id is not null then date_diff(orders.fecha, noti.fecha, hour) else -1 end attrib,
+
+rank() over (partition by orders.order_id order by noti.fecha desc) as party
+
+from orders inner join noti
+on noti.site_id=orders.site_id
+and noti.user_id=orders.user_id
+and extract(month from noti.fecha) = extract(month from orders.fecha)
+and not (noti.fecha >= date_sub(orders.fecha, interval attribution_value hour)
+and noti.fecha < orders.fecha)
+)
+
+
+where party=1
+),
+
+todo as
+(
+select
+noti.site_id site,
+noti.fecha fecha,
+atribucion.fecha_orden fecha_orden,
+noti.user_id user,
+noti.grupo grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+atribucion.orders,
+atribucion.attrib,
+noti.shown,
+noti.open,
+noti.batch_credit,
+--noti.recc,
+
+from noti left join atribucion
+on noti.execution_id=atribucion.notificaciones
+)
+
+select
+site,
+extract(date from fecha) fecha,
+experimento,
+batch_credit,
+--recc,
+attrib attrib_delay,
+concat(cast(attribution_value as string),'hs') atribucion,
+count(distinct case when grupo='test' then notificaciones end) notificaciones_test,
+count(distinct case when grupo='cg' then notificaciones end) notificaciones_cg,
+count(distinct case when grupo='test' then user end) users_test,
+count(distinct case when grupo='cg' then user end) users_cg,
+count(distinct case when ((orders is not null) and (grupo='test')) then user end) buyers_test,
+count(distinct case when ((orders is not null) and (grupo='cg')) then user end) buyers_cg,
+count(distinct case when grupo='test' then orders end) orders_test,
+count(distinct case when grupo='cg' then orders end) orders_cg,
+count(distinct shown) showns,
+count(distinct open) opens,
+
+-- count(distinct case when grupo='cg' then user end) / count(distinct user) sesgo_cg,
+-- count(distinct shown)/count(distinct case when grupo='test' then notificaciones end) exposure,
+-- count(distinct open)/count(distinct shown) open_rate,
+--*
+from todo
+where experimento in (campana_value)
+group by 1,2,3,4,5--,6",Jose
