@@ -11222,7 +11222,7 @@ count(distinct open) opens,
 from todo
 where experimento in (campana_value)
 group by 1,2,3,4,5,6",Jose
-Xsell Live. Reporte de Xsell  partir de la Tracks.,"fecha, mod control, users, notis, buyers, orders test y cg, same item, cvr, shown, open, open rate","WITH users AS (
+Xsell Live. Reporte de Xsell en vivo partir de la Tracks.,"fecha, mod control, users, notis, buyers, orders test y cg, same item, cvr, shown, open, open rate","WITH users AS (
 Select
 ds notification_date, 
      CASE WHEN path = '/notification/campaigns_generic' THEN 'test'
