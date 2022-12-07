@@ -11344,10 +11344,10 @@ AND timestamp_add(ts, INTERVAL 4 HOUR) > b.user_timestamp
 GROUP BY 1,2
 -- GROUP BY 1,2,3
 ;",Clara
-Atribucion Negativa para Xsell. Se asignan las ordenes del mismo user pero fuera del período de atribución.,"site, fecha, experimento, batch credit, attrib delay, atribucion, notificaciones, users, buyers, orders, test y cg, shown, open","DECLARE site_value STRING DEFAULT 'MLB';
+Atribucion Negativa para Xsell. Se asignan las ordenes del mismo user y mes pero fuera del período de atribución.,"site, fecha, experimento, batch credit, attrib delay, atribucion, notificaciones, users, buyers, orders, test y cg, shown, open","DECLARE site_value STRING DEFAULT 'MLB';
 DECLARE campana_value STRING DEFAULT 'xsell';
 DECLARE start_date_value TIMESTAMP DEFAULT '2022-10-01 00:00:00';
-DECLARE end_date_value TIMESTAMP DEFAULT '2022-10-30 23:59:59';
+DECLARE end_date_value TIMESTAMP DEFAULT '2022-12-30 23:59:59';
 DECLARE attribution_value INT64 DEFAULT 48;
 
 with orders as
@@ -11402,6 +11402,25 @@ and notification_date <= extract(date from end_date_value)
 and sit_site_id in (site_value)
 ),
 
+atribucion_exc as
+(
+select * 
+from (select
+orders.order_id order_id, --//
+
+rank() over (partition by orders.order_id order by noti.fecha desc) as party
+
+from orders inner join noti
+on noti.site_id=orders.site_id
+and noti.user_id=orders.user_id
+and noti.fecha >= date_sub(orders.fecha, interval attribution_value hour)
+and noti.fecha < orders.fecha
+)
+
+
+where party=1
+),
+
 atribucion as
 (
 select * 
@@ -11419,12 +11438,14 @@ case when orders.order_id is not null then date_diff(orders.fecha, noti.fecha, h
 
 rank() over (partition by orders.order_id order by noti.fecha desc) as party
 
-from orders inner join noti
+from orders left join atribucion_exc on orders.order_id = atribucion_exc.order_id --//
+
+inner join noti
 on noti.site_id=orders.site_id
 and noti.user_id=orders.user_id
-and extract(month from noti.fecha) = extract(month from orders.fecha)
-and not (noti.fecha >= date_sub(orders.fecha, interval attribution_value hour)
-and noti.fecha < orders.fecha)
+and extract(month from noti.fecha) = extract(month from orders.fecha) --//
+
+where atribucion_exc.order_id is null --//
 )
 
 
@@ -11456,9 +11477,9 @@ select
 site,
 extract(date from fecha) fecha,
 experimento,
-batch_credit,
+--batch_credit,
 --recc,
-attrib attrib_delay,
+--attrib attrib_delay,
 concat(cast(attribution_value as string),'hs') atribucion,
 count(distinct case when grupo='test' then notificaciones end) notificaciones_test,
 count(distinct case when grupo='cg' then notificaciones end) notificaciones_cg,
@@ -11474,7 +11495,7 @@ count(distinct open) opens,
 -- count(distinct case when grupo='cg' then user end) / count(distinct user) sesgo_cg,
 -- count(distinct shown)/count(distinct case when grupo='test' then notificaciones end) exposure,
 -- count(distinct open)/count(distinct shown) open_rate,
---*
+-- *
 from todo
 where experimento in (campana_value)
-group by 1,2,3,4,5--,6",Jose
+group by 1,2,3--,4,5--,6",Jose
