@@ -7992,13 +7992,15 @@ AND bu = 'mercadolibre'
 and path in ('/short') --','/short/swipe','/short/share')
 LIMIT 5
 --group by 1,2",Jose
-Shorts: análisis rápido de cantidad de users por site por fecha.,"site, date, users","SELECT
+"Shorts: análisis rápido de cantidad de users, shorts y views por site por fecha.","site, date, users, shorts, views","SELECT
 site,
-date(ds),
+date(ds) fecha,
 count(distinct usr.user_id) users,
+count(distinct json_value(event_data, '$.short_id')) shorts,
+count(distinct case when type = 'view' then id else null end) views,
 FROM meli-bi-data.MELIDATA.TRACKS as A
 WHERE  1=1 --path IN ('/notification/campaigns_generic', '/notification/campaigns_control_group')
-AND ds >= '2022-09-01'
+AND ds >= '2022-11-01'
 -- AND json_value(event_data, '$.campaign_id')  LIKE '%MANTIKA%'--, 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
 -- AND json_value(event_data, '$.campaign_id')  IN ('REMARKETING_MANTIKA', 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
 --AND json_value(event_data, '$.event_type')  IN ('sent') --, 'shown', 'open')
@@ -11499,3 +11501,188 @@ count(distinct open) opens,
 from todo
 where experimento in (campana_value)
 group by 1,2,3--,4,5--,6",Jose
+Analisis Query Rehecha y Sesgos.,"site, fecha, experimento, notis, users, buyers orders test y cg, showns, opens, sesgo cg, exposure, open rate","DECLARE site_value STRING DEFAULT 'MLB';
+DECLARE campana_value STRING DEFAULT 'xsell';
+DECLARE start_date_value TIMESTAMP DEFAULT '2022-10-01 00:00:00';
+DECLARE end_date_value TIMESTAMP DEFAULT '2022-12-13 23:59:59';
+DECLARE attribution_value INT64 DEFAULT 48;
+
+with orders as
+(
+select 
+date_add(tim_day_winning_time, interval 4 hour) AS fecha, 
+sit_site_id as site_id,
+cus_cust_id AS user_id, 
+ord_order_id AS order_id, 
+from  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+where 1=1
+and tim_day_winning_date >= extract(date from start_date_value)
+and tim_day_winning_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+noti as
+(
+select 
+sit_site_id as site_id,
+date_add(user_timestamp, interval 4 hour) as fecha,
+A.cus_cust_id as user_id,
+batch_type grupo,
+execution_id execution_id,
+case when event_type IN ('shown') then execution_id end shown,    
+case when event_type IN ('open') then execution_id end open,
+batch_credit,
+
+case when left(execution_id,1) = '2' then 'xsell'
+when left(execution_id,1) = '0' then 'remarketing'
+when left(execution_id,1) in ('4', '5', '6', '7', '8', '9') then 'resend'
+when left(execution_id,1) in ('1', '3') then 'fuera de cobertura'
+else 'error' end experimento,
+
+--rec.recc recc,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+-- left join (
+-- select
+-- cus_cust_id, count(distinct ord_order_id) recc,
+-- FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+-- where tim_day_winning_date >= '2022-08-01' and tim_day_winning_date <= '2022-10-31' and sit_site_id in (site_value)
+-- group by 1
+-- ) rec on A.cus_cust_id=rec.cus_cust_id
+
+where campaign_id = 'REMARKETING_MANTIKA'
+and event_type in ('sent', 'shown', 'open')
+--and left(execution_id, 1) in ('2')
+and notification_date >= extract(date from start_date_value)
+and notification_date <= extract(date from end_date_value)
+and sit_site_id in (site_value)
+),
+
+atribucion as
+(
+select * 
+from (select
+noti.site_id site,
+noti.fecha fecha,
+orders.fecha fecha_orden,
+noti.user_id user,
+noti.grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+orders.order_id orders,
+
+case when orders.order_id is not null then date_diff(orders.fecha, noti.fecha, hour) else -1 end attrib,
+
+rank() over (partition by orders.order_id order by noti.fecha desc) as party
+
+from orders inner join noti
+on noti.site_id=orders.site_id
+and noti.user_id=orders.user_id
+and extract(month from noti.fecha) = extract(month from orders.fecha)
+and noti.fecha >= date_sub(orders.fecha, interval attribution_value hour)
+and noti.fecha < orders.fecha
+)
+
+
+where party=1
+),
+
+todo as
+(
+select
+noti.site_id site,
+noti.fecha fecha,
+atribucion.fecha_orden fecha_orden,
+noti.user_id user,
+noti.grupo grupo,
+noti.experimento experimento,
+noti.execution_id notificaciones,
+atribucion.orders,
+atribucion.attrib,
+noti.shown,
+noti.open,
+noti.batch_credit,
+--noti.recc,
+
+from noti left join atribucion
+on noti.execution_id=atribucion.notificaciones
+)
+--select * from todo
+select
+site,
+extract(date from fecha) fecha,
+experimento,
+--batch_credit,
+--recc,
+--attrib attrib_delay,
+concat(cast(attribution_value as string),'hs') atribucion,
+count(distinct case when grupo='test' then notificaciones end) notificaciones_test,
+count(distinct case when grupo='cg' then notificaciones end) notificaciones_cg,
+count(distinct case when grupo='test' then user end) users_test,
+count(distinct case when grupo='cg' then user end) users_cg,
+count(distinct case when ((orders is not null) and (grupo='test')) then user end) buyers_test,
+count(distinct case when ((orders is not null) and (grupo='cg')) then user end) buyers_cg,
+count(distinct case when grupo='test' then orders end) orders_test,
+count(distinct case when grupo='cg' then orders end) orders_cg,
+count(distinct shown) showns,
+count(distinct open) opens,
+
+count(distinct case when grupo='cg' then user end) / count(distinct user) sesgo_cg,
+count(distinct shown)/count(distinct case when grupo='test' then notificaciones end) exposure,
+count(distinct open)/count(distinct shown) open_rate,
+
+from todo
+where experimento in (campana_value)
+group by 1,2,3,4--,5--,6",Jose
+Delay entre nuestro envio y el de MeLi.,"site, fecha, experimento, grupo batch user, grupo batch noti, users, notis","WITH NOTIF AS (
+SELECT 
+a.site_id, 
+a.user_id,
+a.domain_id,
+a.score_id,
+date_add(b.user_timestamp, INTERVAL 4 hour) as user_timestamp,
+created_at as created_at_date,
+coalesce(batch_type, 'NOSENT') batch_type,
+score
+
+FROM ( SELECT * FROM `meli-bi-data.SBOX_MANTIKAMARKETING.MARKETING_LOGS_DATA`  
+WHERE CAST(created_at AS DATE) >= '2022-10-01' 
+AND ARRAY_LENGTH(SPLIT(score_id, '_')) > 1 
+AND site_id IN ('MLB')
+AND left(score_id,1) ='2'
+) a 
+LEFT JOIN (SELECT * FROM `meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports` 
+WHERE event_type = 'sent' 
+and ARRAY_LENGTH(SPLIT(execution_id, '_')) > 1
+AND left(execution_id,1) ='2'
+) b ON split(b.execution_id, '_')[OFFSET (1)] = SPLIT(a.score_id, '_')[OFFSET (1)]
+
+GROUP BY 1,2,3,4,5,6,7,8
+
+)
+
+, TYPE_IDENTIFICADOR AS (
+SELECT
+
+a.site_id,
+a.user_id,
+a.batch_type,
+count(*)
+FROM NOTIF a
+group by 1,2,3
+)
+
+SELECT distinct
+a.site_id site,
+extract(date from created_at_date) fecha,
+timestamp_diff(a.user_timestamp, created_at_date, minute) delay,
+a.batch_type grupo,
+count(distinct a.score_id) notis,
+count(distinct a.user_id) users,
+--CASE WHEN other_noti = -1 then 'not_sent_again' ELSE 'sent_again' END sent_again,
+-- APPROX_QUANTILES(score, 10) score_dist,
+ FROM NOTIF a LEFT JOIN TYPE_IDENTIFICADOR b
+  ON a.user_id = b.user_id
+  and a.site_id = b.site_id
+ GROUP BY 1,2,3,4--,5,6",Jose
