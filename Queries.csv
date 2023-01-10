@@ -11686,3 +11686,592 @@ count(distinct a.user_id) users,
   ON a.user_id = b.user_id
   and a.site_id = b.site_id
  GROUP BY 1,2,3,4--,5,6",Jose
+Condición: Wordings MCO y MLC.,wording,"case when sit_site_id ='MCO' then
+    case  
+        when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") then 'normal'
+        when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then 'cc'
+        when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"")  then ""free_shipping""
+        when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""installments""  
+        when right(left(execution_id,2),1) in (""G"",""H"",""I"",""J"") then ""free_shipping_installments"" 
+        else ""otro wording""
+    end 
+    when sit_site_id = 'MLC'then
+    case
+        when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") THEN ""normal""
+        when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") THEN 'cc'
+        when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""free_shipping""    
+        when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""installments""
+        when right(left(execution_id,2),1) in (""G"",""H"",""I"",""J"") then ""free_shipping_installments""
+    else ""otro wording""
+    end end as wording,",Clara
+Email y Regla de Ale: Cantidad de usuarios excluidos y que abrieron o no abrieron un email.,"site, condcion, users","with email_openers as 
+(select * from 
+(
+select user_id, count(distinct email_id) aperturas from
+(SELECT
+application.site_id, ds, user_timestamp, usr.user_id user_id, path, event_data, json_value(event_data, '$.event_type') event_type, json_value(event_data, '$.email_id') email_id,
+FROM meli-bi-data.MELIDATA.TRACKS as A
+    WHERE  path IN ('/email/generic')
+        AND ds >= '2022-08-01'
+        AND ds <= '2022-12-01' -1
+        --AND json_value(event_data, '$.campaign_id')  LIKE '%MANTIKA%'--, 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
+        --AND json_value(event_data, '$.campaign_id')  IN ('REMARKETING_MANTIKA', 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
+        --AND json_value(event_data, '$.event_type')  IN ('sent') --, 'shown', 'open')
+        AND site IN  ('MLB', 'MLC', 'MLU', 'MCO', 'MPE') -- ('MLB', 'MCO', 'MLM', 'MLU', 'MLC','MLM', 'MLA', 'MPE')
+        AND bu = 'mercadolibre'
+        and json_value(event_data, '$.event_type') = 'open'
+        ORDER BY user_timestamp, usr.user_id)
+group by 1
+)
+where aperturas >= 3
+), 
+
+ales_enemies as (
+select distinct sit_site_id, cus_cust_id
+from (select 
+      cus_cust_id, sit_site_id,
+      sum(case when a.event_type = 'shown' then 1 else 0 end) as showns,
+      sum(case when a.event_type = 'open' then 1.00 else 0 end) as opens,
+      count(distinct case when a.event_type = 'shown' then execution_id end) as showns_noti,
+      count(distinct case when a.event_type = 'open' then execution_id end) as opens_noti,
+      FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports a
+      WHERE 1=1
+      and a.event_type in ('shown','open')
+      and a.sit_site_id in ('MLB', 'MLC', 'MLU', 'MCO', 'MPE')
+      and a.notification_date >= '2022-08-01'
+      and a.notification_date <= '2022-12-01'-1
+      and a.platform = '/mobile/android'
+      and batch_type = 'test'
+      and left(execution_id,1) NOT IN ('2', 'B')
+      and campaign_id = 'REMARKETING_MANTIKA'
+      group by 1,2
+      --limit 10
+      ) b
+where 1=1
+and showns > 10 and opens / nullif(showns,0) <= 0.0125
+)
+select sit_site_id, condicion, count(condicion) users,
+from
+(
+select *,
+case 
+when user_id is not null and cus_cust_id is not null then 'email-si_//_ale-si'
+when user_id is null and cus_cust_id is not null then 'email-no_//_ale-si'
+when user_id is not null and cus_cust_id is null then 'email-si_//_ale-no'
+when user_id is null and cus_cust_id is null then 'email-no_//_ale-no'
+else 'error' end condicion,
+from email_openers full outer join ales_enemies 
+on email_openers.user_id = cast(ales_enemies.cus_cust_id as string)
+)
+group by 1,2",Jose
+CTR: Click through rate para reporte de Xsell.,"site, fecha, week, users, buyers, orders, gmv test y cg, incremental orders, incremental buyers, showns, opens, ctr, clicks ours unique, clicks our dups, clicks both, s items, clicked bought orders y buyers","with OpR AS (
+SELECT 
+        notification_date,
+        sit_site_id,
+        campaign_id,
+        sum(case when event_type IN ('shown') and platform = '/mobile/android' then 1 else 0 end) shown,    
+        sum(case when event_type IN ('open') and platform = '/mobile/android' then 1 else 0 end) open,  
+    FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+    WHERE 1=1
+        AND notification_date >= current_date() - 30
+        AND event_type  IN ('shown', 'open')
+        AND campaign_id = 'REMARKETING_MANTIKA' 
+        AND left(execution_id,1) = '2'
+        AND platform = '/mobile/android'
+GROUP BY 1, 2, 3),
+ORDERS as
+(
+SELECT cus_cust_id AS user_id, 
+-- ord_created_dttm esta sin timezone pero con horario de -4 (le sumamos 4 para corregir)
+DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER, 
+SIT_SITE_ID as site_id,
+ ord_order_id AS order_id, 
+ item_id,
+ domain_id,
+ GMV_USD
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= current_date() - 30
+AND tim_day_winning_date < current_date()
+AND SIT_SITE_ID in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+)
+,NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+batch_type,
+-- CASE 
+-- WHEN sit_site_id = 'MLB' and mod(cus_cust_id, 100) < 35 THEN 'lower'
+-- WHEN sit_site_id = 'MLB' and mod(cus_cust_id, 100) >= 35 THEN 'upper'
+-- WHEN sit_site_id = 'MLM' and mod(cus_cust_id, 100) < 25 THEN 'lower'
+-- WHEN sit_site_id = 'MLM' and mod(cus_cust_id, 100) >= 25 THEN 'upper'
+-- ELSE 'all' END xsell_divider,
+CASE WHEN left(execution_id,1) = '2' THEN 'xsell'
+    WHEN left(execution_id,1) = '4' THEN 'resend_1'
+    WHEN left(execution_id,1) = '6' THEN 'resend_10'
+    ELSE
+    CASE WHEN experiment = '7' then 'v17' 
+        WHEN experiment = '9' THEN 'resend_1'
+        WHEN experiment IN ('B', 'D', '8') THEN 'remove_v6'                      
+        WHEN experiment IN ('A', 'B') THEN 'reorder_with_redis'
+        WHEN experiment IN ('C', 'D') THEN 'reorder_with_postgres'
+        WHEN experiment = 'E' THEN 'v19'
+        WHEN experiment = 'F' THEN 'resend_10'
+        ELSE 'v6' END END  experiment,
+CASE WHEN left(execution_id,1) = '2' THEN 'xsell'
+    WHEN left(execution_id,1) in ('4', '6', '7', '8', '5', '9') THEN 'resend'
+    ELSE 
+    CASE WHEN experiment = '9' then 'resend'
+        WHEN experiment = 'F' THEN 'resend'
+        ELSE 'remarketing' END END  experiment_type,
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 30
+AND notification_date < current_date()
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) = '2'
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, gmv_usd--, xsell_divider, --experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+-- n.batch_credit,
+n.batch_type,
+-- n.xsell_divider,
+--n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)) THEN n.notif_dttm END notif_24,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 1 HOUR)) THEN n.notif_dttm END notif_1,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+CASE WHEN  (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5)) THEN n.notif_dttm END notif_same_items,
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+-- AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 4 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+(
+select
+site_id,
+campaign,
+--experiment,
+-- xsell_divider,
+-- batch_credit,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+ -- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_2day_test,
+count(distinct case when batch_type='test' then  order_id  end) orders_2day_test,
+sum(case when batch_type='test' then gmv_usd end) gmv_2day_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_2day_cg,
+count(distinct case when batch_type='cg' then  order_id  end) orders_2day_cg,
+sum(case when batch_type='cg' then gmv_usd end) gmv_2day_cg,
+-- 24 hours
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_test_24,
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  order_id  end) orders_test_24,
+-- sum(case when batch_type='test' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_test_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_cg_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  order_id  end) orders_cg_2,
+-- sum(case when batch_type='cg' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_cg,
+-- 24 hours same domain
+from  orders_atribuidas
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3--,4--, 5
+), orders_atribuidas_s_item AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, gmv_usd--, xsell_divider, --experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+-- n.batch_credit,
+n.batch_type,
+-- n.xsell_divider,
+--n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)) THEN n.notif_dttm END notif_24,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 1 HOUR)) THEN n.notif_dttm END notif_1,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+CASE WHEN  (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5)) THEN n.notif_dttm END notif_same_items,
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 48 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas_s_item as
+(
+select
+site_id,
+campaign,
+--experiment,
+-- xsell_divider,
+-- batch_credit,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+ -- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_2day_test_s_item,
+count(distinct case when batch_type='test' then  order_id  end) orders_2day_test_s_item,
+sum(case when batch_type='test' then gmv_usd end) gmv_2day_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_2day_cg_s_item,
+count(distinct case when batch_type='cg' then  order_id  end) orders_2day_cg_s_item,
+sum(case when batch_type='cg' then gmv_usd end) gmv_2day_cg,
+-- 24 hours
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_test_24,
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  order_id  end) orders_test_24,
+-- sum(case when batch_type='test' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_test_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_cg_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  order_id  end) orders_cg_2,
+-- sum(case when batch_type='cg' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_cg,
+-- 24 hours same domain
+from  orders_atribuidas_s_item
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3--,4--, 5
+)
+,
+total_sent as
+(
+select
+site_id,
+campaign ,
+--experiment,
+-- xsell_divider,
+--batch_credit,
+date(notif_dttm) fecha,
+-- extract(HOUR FROM notif_dttm ) hora,
+count(distinct case when batch_type='test' then  user_id  end) users_test,
+count(distinct case when batch_type='cg' then  user_id  end) users_cg
+from notif
+group by 1,2,3--,4--, 5
+), clicks as (
+    select 
+    site,
+    json_value(platform.fragment,'$.reco_item_pos') pos,
+    usr.user_id user_id,
+    coalesce(JSON_EXTRACT_SCALAR(tracks.event_data, ""$['item_id']""), JSON_EXTRACT_SCALAR(tracks.event_data, ""$['catalog_product_id']"")) item_id,
+    date(min(ds)) click_date,
+    date_sub(timestamp(min(user_timestamp)),interval 4 hour) click_time
+    FROM meli-bi-data.MELIDATA.TRACKS
+    where 1=1
+    AND ds >= current_date() - 30
+    and bu = 'mercadolibre'
+    and path in ('/pdp','/vip')
+    and type = 'view'
+    and json_value(platform.fragment,'$.reco_client') = 'growth-notif'
+    group by 1,2,3,4--,5
+),
+full_users as (
+    select 
+    execution_id score_id,
+    --notification_date,
+    campaign_id,
+    sit_site_id site_id,
+    CUS_CUST_ID user_id,
+    item_id_1 item1,
+    item_id_2 item2,
+    item_id_3 item3,
+    item_id_4 item4,
+    item_id_5 item5,
+    date(min(notification_date)) notification_date,
+    date_sub(min(user_timestamp), interval 4 hour) notification_time
+    from `SBOX_MANTIKAMARKETING.full_users_mtk_reports`
+    where 1=1
+    and notification_date >= current_date() - 30
+    and event_type = 'sent'
+    and left(execution_id,1) = '2'
+    AND platform = '/mobile/android'
+    group by 1,2,3,4,5,6,7,8,9
+), ctr as (
+    select 
+    site, 
+    notification_date,
+    count(distinct(score_id)) clicks_ours_unique,
+    count(score_id) clicks_ours_dup,
+    count(*) clicks_both
+    from clicks c
+    left join full_users l
+    on c.user_id = cast (l.user_id as string)
+    and c.site = l.site_id
+    and c.item_id in (l.item1, l.item2, l.item3, l.item4, l.item5)
+    and c.click_date >= l.notification_date
+    group by 1,2
+    having clicks_ours_dup >0
+),
+conversion_clicked as(  
+    select 
+    b.site_id,
+    l.notification_date fecha,
+    count(*) clicked_bought,
+    sum(case when date_sub(b.fecha_order, interval 48 hour) < l.notification_time then 1 else 0 end ) clicked_bought_48,
+    count(distinct(case when date_sub(b.fecha_order, interval 48 hour) < l.notification_time then b.order_id end )) clicked_bought_48_orders,
+    count(distinct(case when date_sub(b.fecha_order, interval 48 hour) < l.notification_time then c.user_id end )) clicked_bought_48_buyers
+    from orders b
+    left join clicks c
+        on 1=1
+        and c.site = b.site_id
+        and c.user_id = cast (b.user_id as string)
+        and c.item_id = b.item_id
+        and b.fecha_order >= c.click_time
+        and date_sub(b.fecha_order, interval 7 day) < c.click_time
+    left join full_users l
+        on c.user_id = cast (l.user_id as string)
+        and c.site = l.site_id
+        and c.item_id in (l.item1, l.item2, l.item3, l.item4, l.item5)
+        and c.click_time >= l.notification_time
+    where 1=1
+    --and left(l.score_id,1) = '2'
+    group by 1,2
+)
+
+select
+o.site_id sit_site_id,
+o.fecha notification_date,
+date_trunc(o.fecha, week(saturday)) weeks,
+users_test/(users_test+users_cg) user_relation,
+users_test,
+o.buyers_2day_test,
+o.orders_2day_test,
+o.gmv_2day_test,
+users_cg, o.buyers_2day_cg, o.orders_2day_cg, o.gmv_2day_cg,
+COALESCE(o.buyers_2day_test - (o.buyers_2day_cg * users_test / NULLIF(users_cg, 0)), 0) inc_buyers,
+COALESCE(o.orders_2day_test - (o.orders_2day_cg * users_test / NULLIF(users_cg, 0)), 0) inc_orders,
+or_.shown,
+or_.open, 
+ctr.clicks_ours_unique,
+ctr.clicks_ours_dup,
+ctr.clicks_both,
+--cvc.clicked_bought,
+--cvc.clicked_bought_48,
+cvc.clicked_bought_48_orders,
+cvc.clicked_bought_48_buyers,
+osi.buyers_2day_test_s_item,
+orders_2day_test_s_item,
+buyers_2day_cg_s_item,
+orders_2day_cg_s_item,
+from total_orders_atribuidas o 
+left join total_sent n on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha -- and o.xsell_divider=n.xsell_divider --AND o.hora = n.hora
+LEFT JOIN OpR or_
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id -- AND o.xsell_divider = or_.xsell_divider""""""
+left join ctr
+on o.fecha = ctr.notification_date
+and o.site_id = ctr.site
+left join conversion_clicked cvc
+on o.fecha = cvc.fecha
+and o.site_id = cvc.site_id
+left join total_orders_atribuidas_s_item osi
+on o.site_id=osi.site_id 
+and o.campaign=osi.campaign 
+and o.fecha=osi.fecha",Nico
+Notificaciones que no tienen todos los items en la tracks.,"fecha, site, experimento, item1, item2, item3, item4, item5","select 
+ ds notification_date, site,
+CASE WHEN left(
+           CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') END
+      ,1) = '0' THEN 'remarketing'
+WHEN left(CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') END
+      ,1) = '2' THEN 'xsell'
+else ""rsnd"" END
+       experimento,
+
+
+count(CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') END),
+count(json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (0)]) item1,
+count(json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (1)]) item2,
+count(json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (2)]) item3,
+count(json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (3)]) item4,
+count(json_extract_string_array(json_value(event_data,'$.campaign_data'),'$.items')[SAFE_OFFSET (4)]) item5
+ from   `meli-bi-data.MELIDATA.TRACKS` 
+where 1=1
+and ds >= '2022-12-01'
+
+and path IN ('/notification/campaigns_generic')--, '/notification/campaigns_control_group') 
+  AND json_value(event_data, '$.communication_id') in ('d3ac7c13-6596-49aa-95c6-03cad2ebc83f',
+                                                                    'b0343141-a319-4452-a50d-143e7d195e65',
+                                                                    'c122e0dd-fce0-4b9b-83bd-744274daaf1f',
+                                                                    '3a9adfe2-5ca2-4060-8b56-c12b0e556de0',
+                                                                    'aa37b710-0f50-4fc1-b372-f49b4bfafbb3',
+                                                                    'eb5988de-7521-4645-bf6f-f6b9fb525236',
+                                                                    '568acdb6-63ab-43b2-8d7b-c6751da88d6a',
+                                                                    '684a8d14-74a5-41e8-ba74-272b2f58ca1a',
+                                                                    '8407f114-44d2-474b-9343-caecb6903520',
+                                                                    '80a40bce-3b49-4b1b-8e28-43789d445a5a',
+                                                                    '17b9b1a2-cb6b-43ec-b029-5f3a84c2e175',
+                                                                    '3e10daf1-91d8-4278-b8d7-9c6bfc516b99',
+                                                                    '49678d7e-7ac1-4a33-a66b-a1fd499697e5',
+                                                                    '294ac549-659e-4fc7-89a6-d344e51d835e',
+                                                                    '7f1a42dc-8114-4837-ba89-fe2eee6d9a31',
+                                                                    '55d0c2d5-47b1-4175-a669-89a908b69ca8',
+                                                                    'eb6feb65-b5bb-474c-9ab5-5dc9b4016ae4',
+                                                                    'bf41b378-cb9b-4d1c-987a-cdecff8b1638')
+  AND json_value(event_data, '$.event_type')  IN ('sent')--, 'open', 'shown')
+  AND bu = 'mercadolibre'
+  and left(CASE WHEN path = '/notification/campaigns_generic' THEN
+            json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+            ELSE json_value(event_data, '$.execution_id') END, 1) not in ( 'B')
+
+
+group by 1,2,3",Clara
+Delay de Remarketing + Resend por experimento. Mejorada con Chat GPT. Sin nonsent.,"site, experimento, delay, batch type, notificaciones","WITH NOTIF AS (
+  SELECT 
+    a.site_id, 
+    a.user_id,
+    a.score_id,
+    CASE 
+      WHEN left(execution_id,1) = '0' THEN 'rmktn'
+      WHEN left(execution_id,1) = '4' THEN 'resend_1'
+      WHEN left(execution_id,1) = '8' THEN 'resend_7'
+      WHEN left(execution_id,1) = '6' THEN 'resend_10'
+      WHEN left(execution_id,1) = '5' THEN 'resend_3'
+      WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+      WHEN left(execution_id,1) = '9' THEN 'resend_morning' 
+    end rmktn,
+    date_add(b.user_timestamp, INTERVAL 4 hour) as user_timestamp,
+    created_at as created_at_date,
+    coalesce(batch_type, 'NOSENT') batch_type
+  FROM ( 
+    SELECT * 
+    FROM `meli-bi-data.SBOX_MANTIKAMARKETING.MARKETING_LOGS_DATA`  
+    WHERE CAST(created_at AS DATE) >= '2023-01-01' 
+    AND ARRAY_LENGTH(SPLIT(score_id, '_')) > 1 
+    AND site_id = 'MLM'
+    AND left(score_id,1) not in ('2','B','1')
+  ) a 
+  JOIN (
+  SELECT 
+    execution_id, 
+    user_timestamp, batch_type
+  FROM `meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports` 
+  WHERE 
+    event_type = 'sent' 
+    AND ARRAY_LENGTH(SPLIT(execution_id, '_')) > 1
+    AND notification_date > '2023-01-01' -- Solo los últimos 30 días
+  ) b 
+  ON b.execution_id =a.score_id
+),
+GROUP_NOTIF AS (
+  SELECT 
+    site_id,
+    rmktn,
+    batch_type,
+    delay,
+    COUNT(DISTINCT score_id) as notif
+  FROM (
+    SELECT 
+      site_id,
+      rmktn,
+      batch_type,score_id,
+      CASE 
+        WHEN timestamp_diff(user_timestamp,created_at_date,minute)<5 then '00_05'
+        WHEN timestamp_diff(user_timestamp,created_at_date,minute)<15 then '05_15'
+        WHEN timestamp_diff(user_timestamp,created_at_date,minute)<30 then '15_30'
+        WHEN timestamp_diff(user_timestamp,created_at_date,minute)>=30 then '30_inf'
+        ELSE 'k' 
+      end as delay
+    FROM NOTIF
+  )
+  GROUP BY 1,2,3,4
+)
+
+SELECT 
+  site_id,
+  rmktn,
+  delay,
+  batch_type,
+  notif
+FROM GROUP_NOTIF",Clara y GPT
+Delay de Remarketing + Resend por experimento. Incluye nonsent.,"site, experimento, delay, batch type, notificaciones","WITH NOTIF AS (
+SELECT 
+a.site_id, 
+a.user_id,
+a.domain_id,
+a.score_id,
+CASE WHEN left(execution_id,1) = '0' THEN 'rmktn'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning' end rmktn,
+date_add(b.user_timestamp, INTERVAL 4 hour) as user_timestamp,
+created_at as created_at_date,
+coalesce(batch_type, 'NOSENT') batch_type,
+score
+
+FROM ( SELECT * FROM `meli-bi-data.SBOX_MANTIKAMARKETING.MARKETING_LOGS_DATA`  WHERE CAST(created_at AS DATE) >= '2023-01-01' 
+AND ARRAY_LENGTH(SPLIT(score_id, '_')) > 1 AND site_id IN ( 'MLM')
+AND left(score_id,1) not in ('2','B','1')
+) a 
+LEFT JOIN (SELECT * FROM `meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports` WHERE event_type = 'sent' and ARRAY_LENGTH(SPLIT(execution_id, '_')) > 1) b ON b.execution_id =a.score_id
+
+-- GROUP BY 1,2,3,4,5,6,7,8
+
+), TYPE_IDENTIFICADOR AS (
+SELECT
+
+a.site_id,
+a.user_id,
+a.batch_type,
+a.rmktn,
+count(*)
+FROM NOTIF a
+group by 1,2,3,4
+)
+SELECT distinct
+a.site_id,
+-- a.score_id,
+a.rmktn,
+case when timestamp_diff(user_timestamp,created_at_date,minute)<5 then '00_05'
+    when timestamp_diff(user_timestamp,created_at_date,minute)<15 then '05_15'
+    when timestamp_diff(user_timestamp,created_at_date,minute)<30 then '15_30'
+    when timestamp_diff(user_timestamp,created_at_date,minute)>=30 then '30_inf'
+    else 'k' end as delay,
+-- domain_id,
+-- created_at_date,
+-- a.user_timestamp,
+a.batch_type,
+count(distinct a.score_id) notif
+ FROM NOTIF a LEFT JOIN TYPE_IDENTIFICADOR b
+  ON a.user_id = b.user_id
+  and a.site_id = b.site_id
+  and a.rmktn = b.rmktn
+ GROUP BY 1,2,3,4--,5,6
+ ;",Clara
