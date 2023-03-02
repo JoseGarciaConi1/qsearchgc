@@ -12275,3 +12275,2060 @@ count(distinct a.score_id) notif
   and a.rmktn = b.rmktn
  GROUP BY 1,2,3,4--,5,6
  ;",Clara
+Mejora Xsell: comparación entre solución Old y New.,"batch type, compra noti real, compra noti old, compra noti new, notis","select batch_type, compra_noti_real, compra_noti_old, compra_noti_new, count(distinct execution_id) notis, 
+from (
+select --* 
+fecha,
+user,
+batch_type,
+execution_id,
+item_trigger,
+item_id_1, item_id_2, item_id_3, item_id_4, item_id_5,
+item_old_1, item_old_2, item_old_3, item_old_4, item_old_5,
+item_new_1, item_new_2, item_new_3, item_new_4, item_new_5,
+item_bougth,
+domain_trigger,
+domain_id_1, domain_id_2, domain_id_3, domain_id_4, domain_id_5,
+domain_old_1, domain_old_2, domain_old_3, domain_old_4, domain_old_5,
+domain_new_1, domain_new_2, domain_new_3, domain_new_4, domain_new_5,
+domain_buy domain_bougth,
+
+case 
+when item_bougth is null then 'not buy'
+when item_bougth in (item_id_1, item_id_2, item_id_3, item_id_4, item_id_5) then 'in items'
+when domain_buy in (domain_id_1, domain_id_2, domain_id_3, domain_id_4, domain_id_5) then 'in domain'
+else 'out domain' end compra_noti_real,
+
+case 
+when item_bougth is null then 'not buy'
+when item_bougth in (item_old_1, item_old_2, item_old_3, item_old_4, item_old_5) then 'in items'
+when domain_buy in (domain_old_1, domain_old_2, domain_old_3, domain_old_4, domain_old_5) then 'in domain'
+else 'out domain' end compra_noti_old,
+
+case 
+when item_bougth is null then 'not buy'
+when item_bougth in (item_new_1, item_new_2, item_new_3, item_new_4, item_new_5) then 'in items'
+when domain_buy in (domain_new_1, domain_new_2, domain_new_3, domain_new_4, domain_new_5) then 'in domain'
+else 'out domain' end compra_noti_new,
+
+from meli-bi-data.SBOX_MANTIKAMARKETING.OvsN_slccn left join meli-bi-data.SBOX_MANTIKAMARKETING.OvsN 
+on item_id=item_trigger
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.simulacion
+on item=item_trigger
+)
+
+group by 1,2,3,4",Jose
+Mejora Xsell: Sents para la solución Old y New.,"items_old, items_old_5, items_new, items_new_5","select items_old/items items_old, items_old_5/items items_old_5, items_new/items items_new, items_new_5/items items_new_5, 
+from 
+(select 
+count(distinct item) items,
+count(distinct case when item_old_1 is not null then item end) items_old,
+count(distinct case when item_old_5 is not null then item end) items_old_5,
+count(distinct case when item_new_1 is not null then item end) items_new,
+count(distinct case when item_new_5 is not null then item end) items_new_5,
+from meli-bi-data.SBOX_MANTIKAMARKETING.simulacion)",Jose
+Matcheo de Clusters: para cada dbscan le asigna su kmeans unico más parecido.,"custom cluster, kmeans cluster, total products","create table meli-bi-data.SBOX_MANTIKAMARKETING.jose_clusts as
+
+WITH clusters AS (
+  SELECT domain_id, item_id, kmeans as kmeans_cluster, custom as custom_cluster
+  FROM meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v5
+  where custom is not null and kmeans is not null
+), 
+
+match as 
+(
+SELECT kmeans_cluster, custom_cluster, COUNT(DISTINCT item_id) as total_products
+FROM clusters
+GROUP BY kmeans_cluster, custom_cluster
+),
+
+j as 
+(
+SELECT custom_cluster, MAX(total_products) maxx
+FROM match
+group by custom_cluster
+),
+
+k as (
+select j.custom_cluster, kmeans_cluster, total_products from j
+left join match on j.custom_cluster = match.custom_cluster and j.maxx = match.total_products
+),
+
+solouno as 
+(
+select custom_cluster, count(custom_cluster) jj from k
+group by 1
+)
+
+select * from
+(select 
+k.custom_cluster, kmeans_cluster, total_products, jj
+from k
+left join solouno on k.custom_cluster=solouno.custom_cluster and solouno.jj = 1
+order by k.custom_cluster, total_products desc)
+where jj is not null",Jose
+Comparación de Clusters según si unen items de recomendación con items de compra.,"compra, km rate, ct rate, q","select compra, km_rate, ct_rate, count(distinct execution_id) q 
+from
+(
+select execution_id,
+case when item_id is not null then 'compra' else 'no' end compra,
+case when kmeans in (kmeans_1, kmeans_2, kmeans_3, kmeans_4, kmeans_5) then 'km_ok' else 'km_no' end km_rate,
+case when custom in (custom1, custom2, custom3, custom4, custom5) then 'ct_ok' else 'ct_no' end ct_rate,
+
+from
+(
+SELECT execution_id, user_timestamp, CUS_CUST_ID, item_id_1, item_id_2, item_id_3, item_id_4, item_id_5, 
+b1.kmeans kmeans_1, b1.custom custom1,
+b2.kmeans kmeans_2, b2.custom custom2,
+b3.kmeans kmeans_3, b3.custom custom3,
+b4.kmeans kmeans_4, b4.custom custom4,
+b5.kmeans kmeans_5, b5.custom custom5,
+
+FROM `meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports` a	
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8 b1
+on a.item_id_1=b1.item_id
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8 b2
+on a.item_id_1=b2.item_id
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8 b3
+on a.item_id_1=b3.item_id
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8 b4
+on a.item_id_1=b4.item_id
+
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8 b5
+on a.item_id_1=b5.item_id
+
+WHERE notification_date >= '2022-12-21'
+and notification_date <= '2022-12-21'
+and event_type = 'sent' 	
+and ARRAY_LENGTH(SPLIT(execution_id, '_')) > 1	
+AND left(execution_id,1) in ('0', '4', '6', '7', '8', '5', '9')
+and sit_site_id in ('MLB')
+) j
+
+left join
+(
+select 
+cus_cust_id, 
+tim_day_winning_time, 
+bids_marketing_reports.item_id, 
+kmeans, custom,
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports 
+left join meli-bi-data.SBOX_MANTIKAMARKETING.mtk_clusters_v8
+on bids_marketing_reports.item_id=mtk_clusters_v8.item_id
+
+where tim_day_winning_date >= '2022-12-21'
+and tim_day_winning_date <= '2022-12-21'
+and sit_site_id in ('MLB')
+) k
+on j.CUS_CUST_ID = k.cus_cust_id
+and j.user_timestamp < k.tim_day_winning_time
+and j.user_timestamp >= date_sub(k.tim_day_winning_time, interval 2 hour)
+)
+group by 1,2,3",Jose
+Simulaciones de Trigger de Search en MLM y MLA,,"create table meli-bi-data.SBOX_MANTIKAMARKETING.vistas_2_MLM as
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/vip','/pdp'
+ ) --and  -- ACA EVENTO
+						  --(
+							--JSON_VALUE(event_data,'$.item_id') IS NOT NULL AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLM' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  where last_timestamp is not null
+					)
+					where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+create table meli-bi-data.SBOX_MANTIKAMARKETING.vistas_2_MLA as
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/vip','/pdp'
+ ) --and  -- ACA EVENTO
+						  --(
+							--JSON_VALUE(event_data,'$.item_id') IS NOT NULL AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLA' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  where last_timestamp is not null
+					)
+					where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+create table meli-bi-data.SBOX_MANTIKAMARKETING.vista_1_MLM as 
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/vip','/pdp'
+ ) --and  -- ACA EVENTO
+						  --(
+							--JSON_VALUE(event_data,'$.item_id') IS NOT NULL AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLM' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  --where last_timestamp is not null
+					)
+					--where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+create table meli-bi-data.SBOX_MANTIKAMARKETING.vista_1_MLA as 
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/vip','/pdp'
+ ) --and  -- ACA EVENTO
+						  --(
+							--JSON_VALUE(event_data,'$.item_id') IS NOT NULL AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLA' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  --where last_timestamp is not null
+					)
+					--where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+drop table meli-bi-data.SBOX_MANTIKAMARKETING.searching_MLM;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.searching_MLM as 
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/search'
+ ) and  -- ACA EVENTO
+						  --(
+							JSON_VALUE(event_data,'$.domain') IS NOT NULL --AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLM' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  --where last_timestamp is not null
+					)
+					--where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+drop table meli-bi-data.SBOX_MANTIKAMARKETING.searching_MLA;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.searching_MLA as
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/search'
+ ) and  -- ACA EVENTO
+						  --(
+							JSON_VALUE(event_data,'$.domain') IS NOT NULL --AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLA' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  --where last_timestamp is not null
+					)
+					--where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+drop table meli-bi-data.SBOX_MANTIKAMARKETING.searchings_2_MLM;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.searchings_2_MLM as 
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/search'
+ ) and  -- ACA EVENTO
+						  --(
+							JSON_VALUE(event_data,'$.domain') IS NOT NULL --AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLM' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  where last_timestamp is not null
+					)
+					where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+					json_value(event_data, '$.items[0].item.domain_id')is not null and
+					user_timestamp is not null
+				  ) o
+				  on o.user_id = v.user_id and 
+					  o.domain_id = v.domain_id and 
+					  o.user_timestamp > v.would_be_noti_timestamp
+				  where o.user_id is null
+				)
+			)
+		)
+	)
+	where row_count_dom = 1 and row_count_usr = 1 and extract(hour from would_be_noti_timestamp) >= 8
+	group by fecha,user_id
+
+;
+
+drop table meli-bi-data.SBOX_MANTIKAMARKETING.searchings_2_MLA;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.searchings_2_MLA as
+	select fecha,
+		user_id,
+		--case when count(1) <= 3 then count(1) else 3 end notis
+	from (
+		select fecha,
+			user_id,
+			domain_id,
+			would_be_noti_timestamp,
+			dif_dom,
+			row_number() over (partition by user_id, domain_id, dif_dom order by would_be_noti_timestamp) row_count_dom,
+			dif_usr,
+			row_number() over (partition by user_id, dif_usr order by would_be_noti_timestamp) row_count_usr
+		from (
+			select fecha,
+				user_id,
+				domain_id,
+				would_be_noti_timestamp,
+				cast(trunc(ifnull(sum(diff_dom_us) over (partition by user_id, domain_id order by would_be_noti_timestamp), 0)/(12*60*60*1000)) as int64) dif_dom,
+				cast(trunc(ifnull(sum(diff_us) over (partition by user_id order by would_be_noti_timestamp), 0)/(2*60*60*1000)) as int64) dif_usr
+			from (
+				select fecha,
+				  user_id,
+				  domain_id,
+				  would_be_noti_timestamp,
+				  last_user_domain_noti,
+				  timestamp_diff(would_be_noti_timestamp, last_user_domain_noti, millisecond) diff_dom_us,
+				  timestamp_diff(would_be_noti_timestamp, last_user_noti, millisecond) diff_us
+				from (
+				  select fecha,
+					v.user_id,
+					v.domain_id,
+					v.would_be_noti_timestamp,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id, v.domain_id order by v.would_be_noti_timestamp) last_user_domain_noti,
+					lag(v.would_be_noti_timestamp, 1, null) over (partition by v.user_id order by v.would_be_noti_timestamp) last_user_noti
+				  from (
+					select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp would_be_noti_timestamp
+					from (
+					  select fecha,
+					  user_id,
+					  domain_id,
+					  new_timestamp,
+					  last_timestamp,
+					  new_timestamp - last_timestamp diff,
+					  from (
+						select date(user_timestamp) fecha,
+						  user_id,
+						  domain_id,
+						  lag(user_timestamp, 1, null) over (partition by user_id, domain_id order by user_timestamp) last_timestamp,--ACA LAGG CANTIDAD DE NOTIS (CUALQUIERA) Y AGREGA DOMINIO
+						  user_timestamp new_timestamp
+						from (
+						  select distinct
+							usr.user_id,
+							json_value(event_data, '$.domain_id') domain_id,
+							cast(user_timestamp as timestamp) user_timestamp
+						  from meli-bi-data.MELIDATA.TRACKS
+						  where ds >= cast('2023-02-10' as date) and ds <= cast('2023-02-13' as date) and -- ACA FECHA
+						  ( 
+						  path IN (
+ '/search'
+ ) and  -- ACA EVENTO
+						  --(
+							JSON_VALUE(event_data,'$.domain') IS NOT NULL --AND 
+							--(JSON_VALUE(event_data,'$.vertical') ='core' or JSON_VALUE(event_data,'$.vertical') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.item_condition')='new' or JSON_VALUE(event_data,'$.item_condition') IS NULL) AND 
+							--(JSON_VALUE(event_data,'$.buying_mode')='buy_it_now' or JSON_VALUE(event_data,'$.buying_mode') IS NULL)
+						  --)
+						  ) and
+						  usr.user_id is not null and
+						  cast(right(usr.user_id, 2) as int64) < 50 and
+						  --json_value(event_data, '$.domain_id') is not null and
+						  --left(json_value(event_data, '$.item_id'), 3) = 'MLB' and
+						  site ='MLA' --IN ('MLA','MLM','MLB','MLU','MLC','MCO')
+						)
+					  )
+					  where last_timestamp is not null
+					)
+					where diff < interval 2 hour -- ACA VENTANA DE HS
+				  ) v
+				  left join (
+					select distinct
+					  usr.user_id,
+					  json_value(event_data, '$.items[0].item.domain_id') domain_id,
+					  cast(user_timestamp as timestamp) user_timestamp
+					from meli-bi-data.MELIDATA.TRACKS
+					where ds >= cast('2022-12-01' as date) and ds <= cast('2022-12-31' as date) and
+					path in ('/orders/ordercreated', '/checkout/congrats') and
+					usr.user_id is not null and
+			",Jose
+Query Datastudio Experimentos por Día,,"drop table meli-bi-data.SBOX_MANTIKAMARKETING.ds_xp_d;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.ds_xp_d as
+
+select datos.*, min_mod, max_mod, (max_mod - min_mod + 1)/100 user_range,
+inc_buyers / ((max_mod - min_mod + 1)/100) inc_buyers_scaled,
+inc_orders / ((max_mod - min_mod + 1)/100) inc_orders_scaled,
+inc_buyers_domain / ((max_mod - min_mod + 1)/100) inc_buyers_domain_scaled,
+inc_orders_domain / ((max_mod - min_mod + 1)/100) inc_orders_domain_scaled,
+inc_buyers_items / ((max_mod - min_mod + 1)/100) inc_buyers_items_scaled,
+inc_orders_items / ((max_mod - min_mod + 1)/100) inc_orders_items_scaled,
+
+from 
+((
+with OpR AS (
+SELECT 
+        notification_date,
+        sit_site_id,
+        campaign_id,
+        right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+        
+        sum(case when event_type IN ('shown') and platform = '/mobile/android' then 1 else 0 end) shown,    
+        sum(case when event_type IN ('open') and platform = '/mobile/android' then 1 else 0 end) open,  
+    FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+    WHERE 1=1
+        AND notification_date >= current_date() - 33
+        AND event_type  IN ('shown', 'open')
+        AND campaign_id = 'REMARKETING_MANTIKA' 
+        AND left(execution_id,1) in ('0', '4', '5', '6', '7', '8', '9')
+        AND platform = '/mobile/android'
+
+GROUP BY 1, 2, 3, 4, 5),
+
+
+ORDERS as
+(
+SELECT cus_cust_id AS user_id, 
+DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER, 
+SIT_SITE_ID as site_id,
+ ord_order_id AS order_id, 
+ item_id,
+ domain_id,
+ GMV_USD
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= current_date() - 33
+AND tim_day_winning_date < current_date()
+AND SIT_SITE_ID in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+)
+,NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+batch_type,
+
+right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 33
+AND notification_date < current_date()
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) in ('0', '4', '5', '6', '7', '8', '9')
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, notif_24_items, notif_24_domain, experimento, experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+n.batch_type,
+n.experimento,
+n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))) THEN n.notif_dttm END notif_24_items,
+
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+-- AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+(
+select
+site_id,
+campaign,
+experiment,
+experimento,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+ -- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_24_test,
+count(distinct case when batch_type='test' then  order_id  end) orders_24_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_24_cg,
+count(distinct case when batch_type='cg' then  order_id  end) orders_24_cg,
+-- 24 hours
+
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_test_domain,
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_test_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_cg_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_cg_domain,
+
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_test_items,
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_test_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_cg_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_cg_items,
+
+-- 24 hours same domain
+
+from  orders_atribuidas
+
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3,4,5
+),
+
+total_sent as
+(
+select
+site_id,
+campaign ,
+experiment,
+experimento,
+date(notif_dttm) fecha,
+-- extract(HOUR FROM notif_dttm ) hora,
+count(distinct case when batch_type='test' then  user_id  end) users_test,
+count(distinct case when batch_type='cg' then  user_id  end) users_cg,
+from notif
+group by 1,2,3,4,5
+)
+
+select
+o.site_id site,
+o.experiment,
+o.experimento,
+o.fecha,
+-- o.hora,
+coalesce(users_test/nullif(users_test+users_cg,0),0) user_relation,
+users_test,
+users_cg, 
+
+buyers_24_test,
+orders_24_test,
+buyers_24_cg, 
+orders_24_cg,
+COALESCE(buyers_24_test - (buyers_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_buyers,
+COALESCE(orders_24_test - (orders_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_orders,
+
+buyers_24_test_domain,
+orders_24_test_domain,
+buyers_24_cg_domain, 
+orders_24_cg_domain,
+COALESCE(buyers_24_test_domain - (buyers_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_domain,
+COALESCE(orders_24_test_domain - (orders_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_orders_domain,
+
+buyers_24_test_items,
+orders_24_test_items,
+buyers_24_cg_items, 
+orders_24_cg_items,
+COALESCE(buyers_24_test_items - (buyers_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_items,
+COALESCE(orders_24_test_items - (orders_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_orders_items,
+
+or_.shown,
+or_.open, 
+
+from total_orders_atribuidas o 
+left join total_sent n on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.experimento=n.experimento and o.experiment=n.experiment
+--AND o.hora = n.hora
+
+LEFT JOIN OpR or_
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id and o.experimento=or_.experimento and o.experiment=or_.experiment
+)
+
+union all
+
+(
+with OpR AS (
+SELECT 
+        notification_date,
+        sit_site_id,
+        campaign_id,
+        right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+        
+        sum(case when event_type IN ('shown') and platform = '/mobile/android' then 1 else 0 end) shown,    
+        sum(case when event_type IN ('open') and platform = '/mobile/android' then 1 else 0 end) open,  
+    FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+    WHERE 1=1
+        AND notification_date >= current_date() - 33
+        AND event_type  IN ('shown', 'open')
+        AND campaign_id = 'REMARKETING_MANTIKA' 
+        AND left(execution_id,1) = '2'
+        AND platform = '/mobile/android'
+
+GROUP BY 1, 2, 3, 4, 5),
+
+
+ORDERS as
+(
+SELECT cus_cust_id AS user_id, 
+DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER, 
+SIT_SITE_ID as site_id,
+ ord_order_id AS order_id, 
+ item_id,
+ domain_id,
+ GMV_USD
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= current_date() - 33
+AND tim_day_winning_date < current_date()
+AND SIT_SITE_ID in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+)
+,NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+batch_type,
+
+right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 33
+AND notification_date < current_date()
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) = '2'
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, notif_24_items, notif_24_domain, experimento, experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+n.batch_type,
+n.experimento,
+n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))) THEN n.notif_dttm END notif_24_items,
+
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+-- AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+(
+select
+site_id,
+campaign,
+experiment,
+experimento,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+ -- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_24_test,
+count(distinct case when batch_type='test' then  order_id  end) orders_24_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_24_cg,
+count(distinct case when batch_type='cg' then  order_id  end) orders_24_cg,
+-- 24 hours
+
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_test_domain,
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_test_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_cg_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_cg_domain,
+
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_test_items,
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_test_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_cg_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_cg_items,
+
+-- 24 hours same domain
+
+from  orders_atribuidas
+
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3,4,5
+),
+
+total_sent as
+(
+select
+site_id,
+campaign ,
+experiment,
+experimento,
+date(notif_dttm) fecha,
+-- extract(HOUR FROM notif_dttm ) hora,
+count(distinct case when batch_type='test' then  user_id  end) users_test,
+count(distinct case when batch_type='cg' then  user_id  end) users_cg,
+from notif
+group by 1,2,3,4,5
+)
+
+select
+o.site_id site,
+o.experiment,
+o.experimento,
+o.fecha,
+-- o.hora,
+coalesce(users_test/nullif(users_test+users_cg,0), 0) user_relation,
+users_test,
+users_cg, 
+
+buyers_24_test,
+orders_24_test,
+buyers_24_cg, 
+orders_24_cg,
+COALESCE(buyers_24_test - (buyers_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_buyers,
+COALESCE(orders_24_test - (orders_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_orders,
+
+buyers_24_test_domain,
+orders_24_test_domain,
+buyers_24_cg_domain, 
+orders_24_cg_domain,
+COALESCE(buyers_24_test_domain - (buyers_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_domain,
+COALESCE(orders_24_test_domain - (orders_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_orders_domain,
+
+buyers_24_test_items,
+orders_24_test_items,
+buyers_24_cg_items, 
+orders_24_cg_items,
+COALESCE(buyers_24_test_items - (buyers_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_items,
+COALESCE(orders_24_test_items - (orders_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_orders_items,
+
+or_.shown,
+or_.open, 
+
+from total_orders_atribuidas o 
+left join total_sent n on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.experimento=n.experimento and o.experiment=n.experiment
+--AND o.hora = n.hora
+
+LEFT JOIN OpR or_
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id and o.experimento=or_.experimento and o.experiment=or_.experiment
+)
+
+union all
+
+(
+with OpR AS (
+SELECT 
+        notification_date,
+        sit_site_id,
+        campaign_id,
+        right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+        
+        sum(case when event_type IN ('shown') and platform = '/mobile/android' then 1 else 0 end) shown,    
+        sum(case when event_type IN ('open') and platform = '/mobile/android' then 1 else 0 end) open,  
+    FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+    WHERE 1=1
+        AND notification_date >= current_date() - 33
+        AND event_type  IN ('shown', 'open')
+        AND campaign_id = 'REMARKETING_MANTIKA' 
+        AND left(execution_id,1) = 'B'
+        AND platform = '/mobile/android'
+
+GROUP BY 1, 2, 3, 4, 5),
+
+
+ORDERS as
+(
+SELECT cus_cust_id AS user_id, 
+DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER, 
+SIT_SITE_ID as site_id,
+ ord_order_id AS order_id, 
+ item_id,
+ domain_id,
+ GMV_USD
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= current_date() - 33
+AND tim_day_winning_date < current_date()
+AND SIT_SITE_ID in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+)
+,NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+batch_type,
+
+right(left(execution_id,3),1) experimento,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 33
+AND notification_date < current_date()
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) = 'B'
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, notif_24_items, notif_24_domain, experimento, experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+n.batch_type,
+n.experimento,
+n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))) THEN n.notif_dttm END notif_24_items,
+
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+LEFT JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+-- AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+(
+select
+site_id,
+campaign,
+experiment,
+experimento,
+-- extract(HOUR FROM notif_2_day) hora,
+date(notif_2_day) fecha,
+ -- 2 Days
+count(distinct case when batch_type='test' then  buyer_id  end) buyers_24_test,
+count(distinct case when batch_type='test' then  order_id  end) orders_24_test,
+count(distinct case when batch_type='cg' then  buyer_id  end) buyers_24_cg,
+count(distinct case when batch_type='cg' then  order_id  end) orders_24_cg,
+-- 24 hours
+
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_test_domain,
+count(distinct case when batch_type='test' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_test_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  buyer_id  end) buyers_24_cg_domain,
+count(distinct case when batch_type='cg' AND notif_24_domain IS NOT NULL  then  order_id  end) orders_24_cg_domain,
+
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_test_items,
+count(distinct case when batch_type='test' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_test_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  buyer_id  end) buyers_24_cg_items,
+count(distinct case when batch_type='cg' AND notif_24_items IS NOT NULL  then  order_id  end) orders_24_cg_items,
+
+-- 24 hours same domain
+
+from  orders_atribuidas
+
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2,3,4,5
+),
+
+total_sent as
+(
+select
+site_id,
+campaign ,
+experiment,
+experimento,
+date(notif_dttm) fecha,
+-- extract(HOUR FROM notif_dttm ) hora,
+count(distinct case when batch_type='test' then  user_id  end) users_test,
+count(distinct case when batch_type='cg' then  user_id  end) users_cg,
+from notif
+group by 1,2,3,4,5
+)
+
+select
+o.site_id site,
+o.experiment,
+o.experimento,
+o.fecha,
+-- o.hora,
+coalesce(users_test/nullif(users_test+users_cg,0), 0) user_relation,
+users_test,
+users_cg, 
+
+buyers_24_test,
+orders_24_test,
+buyers_24_cg, 
+orders_24_cg,
+COALESCE(buyers_24_test - (buyers_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_buyers,
+COALESCE(orders_24_test - (orders_24_cg * users_test / NULLIF(users_cg, 0)), 0) inc_orders,
+
+buyers_24_test_domain,
+orders_24_test_domain,
+buyers_24_cg_domain, 
+orders_24_cg_domain,
+COALESCE(buyers_24_test_domain - (buyers_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_domain,
+COALESCE(orders_24_test_domain - (orders_24_cg_domain * users_test / NULLIF(users_cg, 0)), 0) inc_orders_domain,
+
+buyers_24_test_items,
+orders_24_test_items,
+buyers_24_cg_items, 
+orders_24_cg_items,
+COALESCE(buyers_24_test_items - (buyers_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_buyers_items,
+COALESCE(orders_24_test_items - (orders_24_cg_items * users_test / NULLIF(users_cg, 0)), 0) inc_orders_items,
+
+or_.shown,
+or_.open, 
+
+from total_orders_atribuidas o 
+left join total_sent n on o.site_id=n.site_id and o.campaign=n.campaign and o.fecha=n.fecha and o.experimento=n.experimento and o.experiment=n.experiment
+--AND o.hora = n.hora
+
+LEFT JOIN OpR or_
+ON o.fecha = or_.notification_date AND o.site_id = or_.sit_site_id and o.experimento=or_.experimento and o.experiment=or_.experiment
+)) datos
+
+left join 
+
+(select notification_date, site_id, experimento, experiment, min(mod_100_users) min_mod, max(mod_100_users) max_mod,  from 
+(
+SELECT 
+notification_date,
+sit_site_id as site_id,
+mod(cus_cust_id  , 100) mod_100_users, 
+right(left(execution_id,3),1) experimento,
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+COUNT(DISTINCT cus_cust_id) cant_users,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+where event_type = 'sent'
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND notification_date >= current_date() - 33
+AND notification_date < current_date()
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) in ('0', '4', '5', '6', '7', '8', '9', '2', 'B')
+
+GROUP BY 1,2,3,4,5
+)
+where cant_users > 100
+group by 1,2,3,4) mods
+
+on mods.notification_date=datos.fecha and mods.site_id=datos.site and mods.experimento=datos.experimento and mods.experiment=datos.experiment",Jose
+Query Datastudio Experimentos por Hora,,"drop table meli-bi-data.SBOX_MANTIKAMARKETING.ds_xp_h;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.ds_xp_h as
+
+WITH users AS (
+Select 
+site,
+
+ds notification_date, 
+
+CASE 
+WHEN path = '/notification/campaigns_generic' THEN 'test'
+ELSE 'cg' END  as batch_type, 
+
+CASE 
+WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end score_id,
+
+right(left(CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end ,3),1) experimento,
+
+CASE WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '0' THEN 'remarketing'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '2' THEN 'xsell'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = 'B' THEN 'buy_again'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '4' THEN 'resend_1'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '8' THEN 'resend_7'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '6' THEN 'resend_10'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '5' THEN 'resend_3'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '7' THEN 'resend_xsell'
+WHEN left((CASE WHEN path = '/notification/campaigns_generic' THEN json_value(json_value(event_data, '$.campaign_data'), '$.execution_id')
+ELSE json_value(event_data, '$.execution_id') end),1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+
+usr.user_id user,
+mod(cast(usr.user_id as int64), 100) mod_100_users,
+
+json_value(event_data, '$.event_type') event_type,
+
+min(DATE_SUB(cast(user_timestamp as timestamp) , INTERVAL 4 hour) )  as ts,
+
+from `meli-bi-data.MELIDATA.TRACKS`
+
+WHERE path IN ('/notification/campaigns_generic', '/notification/campaigns_control_group') 
+AND ds >= current_date-2
+AND json_value(event_data, '$.communication_id') in ('d3ac7c13-6596-49aa-95c6-03cad2ebc83f',
+                                                                    'b0343141-a319-4452-a50d-143e7d195e65',
+                                                                    'c122e0dd-fce0-4b9b-83bd-744274daaf1f',
+                                                                    '3a9adfe2-5ca2-4060-8b56-c12b0e556de0',
+                                                                    'aa37b710-0f50-4fc1-b372-f49b4bfafbb3',
+                                                                    'eb5988de-7521-4645-bf6f-f6b9fb525236',
+                                                                    '568acdb6-63ab-43b2-8d7b-c6751da88d6a',
+                                                                    '684a8d14-74a5-41e8-ba74-272b2f58ca1a',
+                                                                    '8407f114-44d2-474b-9343-caecb6903520',
+                                                                    '80a40bce-3b49-4b1b-8e28-43789d445a5a',
+                                                                    '17b9b1a2-cb6b-43ec-b029-5f3a84c2e175',
+                                                                    '3e10daf1-91d8-4278-b8d7-9c6bfc516b99',
+                                                                    '49678d7e-7ac1-4a33-a66b-a1fd499697e5',
+                                                                    '294ac549-659e-4fc7-89a6-d344e51d835e')  
+                                                                  
+AND site IN ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND json_value(event_data, '$.event_type')  IN ('sent', 'open', 'shown')
+AND bu = 'mercadolibre'
+GROUP BY 1,2,3,4,5,6,7,8,9),
+
+mods as (
+select fecha, site, hora, experiment, experimento, min(mod_100_users) min_mod, max(mod_100_users) max_mod,
+
+from
+(
+select 
+notification_date fecha,
+site,
+extract(hour from ts) hora,
+experiment,
+experimento,
+mod_100_users,
+count(distinct user) q,
+
+from users where event_type = 'sent'
+group by 1,2,3,4,5,6
+)
+where q >= 3
+group by 1,2,3,4,5
+),
+
+datos as 
+(
+select 
+users.notification_date fecha,
+users.site,
+extract(hour from users.ts) hora,
+users.experiment,
+users.experimento,
+count(distinct case when (batch_type = 'test' and event_type = 'sent') then user end) users_test,
+count(distinct case when (batch_type = 'cg' and event_type = 'sent') then user end) users_cg,
+count(distinct case when (batch_type = 'test' and event_type = 'sent') then score_id end) sent_test,
+count(distinct case when (batch_type = 'cg' and event_type = 'sent') then score_id end) sent_cg,
+count(distinct case when (batch_type = 'test' and event_type = 'shown') then score_id end) shown,
+count(distinct case when (batch_type = 'test' and event_type = 'open') then score_id end) open,
+from users
+--where mod_100_users < 10
+group by 1,2,3,4,5
+)
+
+select datos.*, mods.min_mod, mods.max_mod, (max_mod - min_mod + 1)/100 user_range,
+
+from datos left join mods 
+on datos.fecha = mods.fecha and datos.site = mods.site and datos.hora = mods.hora 
+and datos.experiment = mods.experiment and datos.experimento = mods.experimento",Jose
+Cantidad de carritos por numero de items de xsell recomendados que coinciden.,,"with ordenes as 
+(
+select 
+CRT_PURCHASE_ID carrito, 
+ORD_ORDER_ID orders, 
+concat('MLA',ORD_ITEM.ID) item, 
+ORD_CREATED_DTTM fecha, 
+ORD_BUYER.ID buyer
+
+from meli-bi-data.WHOWNER.BT_ORD_ORDERS
+
+where extract(date from ORD_CREATED_DTTM) >= '2023-02-10'
+and sit_site_id in ('MLA')
+and CRT_PURCHASE_ID is not null),
+
+NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+cus_cust_id as user_id,
+execution_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent')
+AND notification_date >= '2023-02-10'
+AND sit_site_id in ('MLA')
+AND left(execution_id, 1) in ('2')
+)
+
+select 
+fecha,
+presencia,
+count(distinct carrito) carritos,
+
+from (
+  select carrito, cast(fecha as date) fecha, sum(presencia) presencia,
+
+  from (
+    select carrito, item, ordenes.fecha, item_id_1, item_id_2, item_id_3, item_id_4, item_id_5,
+
+    case when item in unnest([item_id_1, item_id_2, item_id_3, item_id_4, item_id_5]) then 1 else 0 end presencia,
+
+    from ordenes left join notif
+    on ordenes.buyer = notif.user_id 
+    and cast(ordenes.fecha as timestamp) < notif.notif_dttm
+    --and cast(ordenes.fecha as date) = cast(notif.notif_dttm as date)
+    and cast(ordenes.fecha as timestamp) > timestamp_sub(notif.notif_dttm, interval 1 hour)
+  )
+
+  where item_id_1 is not null
+
+  group by 1,2
+)
+
+group by 1,2",Jose
+Carritos con más de 0 items recomendados por Xsell.,,"with ordenes as 
+(
+select 
+CRT_PURCHASE_ID carrito, 
+ORD_ORDER_ID orders, 
+concat('MLA',ORD_ITEM.ID) item, 
+ORD_CREATED_DTTM fecha, 
+ORD_BUYER.ID buyer
+
+from meli-bi-data.WHOWNER.BT_ORD_ORDERS
+
+where extract(date from ORD_CREATED_DTTM) >= '2023-02-23'
+and sit_site_id in ('MLA')
+and CRT_PURCHASE_ID is not null
+),
+
+NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+cus_cust_id as user_id,
+execution_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent')
+AND notification_date >= '2023-02-23'
+AND sit_site_id in ('MLA')
+AND left(execution_id, 1) in ('2')
+)
+
+select 
+*
+
+from (
+  select carrito, cast(fecha as date) fecha, sum(presencia) presencia,
+
+  from (
+    select carrito, item, ordenes.fecha, item_id_1, item_id_2, item_id_3, item_id_4, item_id_5, execution_id,
+
+    case when item in unnest([item_id_1, item_id_2, item_id_3, item_id_4, item_id_5]) then 1 else 0 end presencia,
+
+    from ordenes left join notif
+    on ordenes.buyer = notif.user_id 
+    and cast(ordenes.fecha as timestamp) < notif.notif_dttm
+    --and cast(ordenes.fecha as date) = cast(notif.notif_dttm as date)
+    and cast(ordenes.fecha as timestamp) > timestamp_sub(notif.notif_dttm, interval 1 hour)
+  )
+
+  where item_id_1 is not null
+
+  group by 1,2
+)
+where presencia > 0",Jose
+Items de un carrito matcheados con la notificacion de xsell 1h posterior.,,"with ordenes as 
+(
+select 
+CRT_PURCHASE_ID carrito, 
+ORD_ORDER_ID orders, 
+concat('MLA',ORD_ITEM.ID) item, 
+ORD_CREATED_DTTM fecha, 
+ORD_BUYER.ID buyer
+
+from meli-bi-data.WHOWNER.BT_ORD_ORDERS
+
+where extract(date from ORD_CREATED_DTTM) >= '2023-02-23'
+and sit_site_id in ('MLA')
+and CRT_PURCHASE_ID = 2000004235784885),
+
+NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+cus_cust_id as user_id,
+execution_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent')
+AND notification_date >= '2023-02-23'
+AND sit_site_id in ('MLA')
+AND left(execution_id, 1) in ('2')
+)
+
+
+    select carrito, orders, item, ordenes.fecha, notif.notif_dttm, item_id_1, item_id_2, item_id_3, item_id_4, item_id_5, execution_id, notif.user_id,
+
+    case when item in unnest([item_id_1, item_id_2, item_id_3, item_id_4, item_id_5]) then 1 else 0 end presencia,
+
+    from ordenes left join notif
+    on ordenes.buyer = notif.user_id 
+    and cast(ordenes.fecha as timestamp) < notif.notif_dttm
+    --and cast(ordenes.fecha as date) = cast(notif.notif_dttm as date)
+    and cast(ordenes.fecha as timestamp) > timestamp_sub(notif.notif_dttm, interval 1 hour)",Jose
+Aporte de checkout congrats y ordercreated sobre las notificaciones de Xsell.,,"with NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+batch_type,
+right(left(execution_id,3),1) experimento,
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id IN ('REMARKETING_MANTIKA')
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 9
+AND notification_date <= current_date() - 3
+AND sit_site_id in ('MLM')
+AND left(execution_id, 1) IN ('2')
+), 
+
+ords as (
+select distinct
+json_value(event_data, '$.order_id') order_id,
+usr.user_id user_id,
+DATE_ADD(cast(user_timestamp as timestamp), INTERVAL 4 HOUR) AS FECHA_ORDER, 
+--path,
+from meli-bi-data.MELIDATA.TRACKS
+WHERE path IN ('/checkout/congrats') AND 
+ds >= current_date() - 11
+and ds <= current_date() - 1
+AND site IN  ('MLM')
+AND bu = 'mercadolibre'
+and json_value(event_data, '$.order_id') is not null
+and usr.user_id is not null
+)
+
+select * from
+(
+select
+experimento,
+case when order_id is null then 'sin order'
+when order_id is not null then 'con orden'
+else 'error' end ordenes,
+count(distinct user_id) q
+
+from (
+select distinct 
+notif.notif_dttm, 
+notif.user_id, 
+notif.experimento,
+ords.order_id,
+from notif
+left join ords on ords.user_id = cast(notif.user_id as string)
+and ords.FECHA_ORDER < timestamp_add(notif.notif_dttm, interval 4 hour)
+and ords.FECHA_ORDER > timestamp_sub(notif.notif_dttm, interval 17 hour)
+)
+group by 1,2
+)
+where q >= 3
+order by 1,2",Jose
+Share de Mantikaen Rmkt MLA por experiment.,"fecha, site, experiment, min mod, max mod, user range","select notification_date, site_id, experiment, min_mod, max_mod, (max_mod - min_mod + 1)/100 user_range,
+
+from 
+
+(select notification_date, site_id, experiment, min(mod_100_users) min_mod, max(mod_100_users) max_mod,  from 
+(
+SELECT 
+notification_date,
+sit_site_id as site_id,
+mod(cus_cust_id  , 100) mod_100_users, 
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) = '4' THEN 'resend_1'
+WHEN left(execution_id,1) = '8' THEN 'resend_7'
+WHEN left(execution_id,1) = '6' THEN 'resend_10'
+WHEN left(execution_id,1) = '5' THEN 'resend_3'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+    ELSE 'error' END  experiment,
+COUNT(DISTINCT cus_cust_id) cant_users,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports
+where event_type = 'sent'
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND notification_date >= '2022-08-01'
+AND notification_date < current_date()
+AND sit_site_id in ('MLA')
+AND left(execution_id, 1) in ('0', '4', '5', '6', '7', '8', '9')
+
+GROUP BY 1,2,3,4
+)
+where cant_users > 100
+group by 1,2,3) mods",Jose
