@@ -10805,6 +10805,7 @@ SELECT
         
     case when sit_site_id = 'MLA' then 
         case when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") then ""normal""
+        when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then ""credits""   
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""cc""
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""free_shipping""
@@ -10812,6 +10813,7 @@ SELECT
         when right(left(execution_id,2),1) in (""K"",""L"",""M"",""N"") then ""free_shipping_installments"" else ""FMLA"" end
     when sit_site_id = ""MLM"" then
        case when right(left(execution_id,2),1) in  (""0"",""1"",""2"",""3"")  then ""normal""
+       when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then ""credits""
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""cc""
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"")        then ""free_shipping""
@@ -10856,6 +10858,7 @@ DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
 -- created_at notif_dttm,
   case when sit_site_id = 'MLA' then 
         case when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") then ""normal""
+        when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then ""credits""   
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""cc""
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""free_shipping""
@@ -10863,6 +10866,7 @@ DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
         when right(left(execution_id,2),1) in (""K"",""L"",""M"",""N"") then ""free_shipping_installments"" else ""FMLA"" end
     when sit_site_id = ""MLM"" then
        case when right(left(execution_id,2),1) in  (""0"",""1"",""2"",""3"")  then ""normal""
+       when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then ""credits""
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""cc""
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"")        then ""free_shipping""
@@ -11689,6 +11693,7 @@ count(distinct a.user_id) users,
 Condición: Wordings MCO y MLC.,wording,"case when sit_site_id ='MCO' then
     case  
         when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") then 'normal'
+        when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") then 'cc'
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"")  then ""free_shipping""
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""installments""  
@@ -11698,6 +11703,7 @@ Condición: Wordings MCO y MLC.,wording,"case when sit_site_id ='MCO' then
     when sit_site_id = 'MLC'then
     case
         when right(left(execution_id,2),1) in (""0"",""1"",""2"",""3"") THEN ""normal""
+        when right(left(execution_id,2),1) in (""O"",""P"") then 'new normal'
         when right(left(execution_id,2),1) in (""4"",""5"",""6"",""7"") THEN 'cc'
         when right(left(execution_id,2),1) in (""8"",""9"",""A"",""B"") then ""free_shipping""    
         when right(left(execution_id,2),1) in (""C"",""D"",""E"",""F"") then ""installments""
@@ -14332,3 +14338,767 @@ GROUP BY 1,2,3,4
 )
 where cant_users > 100
 group by 1,2,3) mods",Jose
+Cantidad de notificaciones duplicadas: mismos 5 items para dos usuarios distintos.,notis y users totales y duplicados,"with notis as
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+execution_id,
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 3
+AND notification_date < current_date()
+AND sit_site_id in ('MLB')
+AND left(execution_id, 1) in ('0')
+),
+matcheo as
+(
+select
+a.item_id_1, a.item_id_2, a.item_id_3, a.item_id_4, a.item_id_5,
+a.user_id user1, b.user_id user2, a.execution_id exe1, b.execution_id exe2,
+from notis a left join notis b
+on a.item_id_1 = b.item_id_1 and a.item_id_2 = b.item_id_2 and a.item_id_3 = b.item_id_3 and a.item_id_4 = b.item_id_4 and a.item_id_5 = b.item_id_5
+and a.user_id <> b.user_id
+)
+select
+count(distinct exe1)  notis,
+count(distinct user1) users,
+from matcheo
+where exe2 is not null
+union all
+(select count(distinct execution_id) notis, count(distinct notis.user_id) users, from notis)",Jose
+Forenses de notificaciones duplicadas: mismos 5 items para dos usuarios distintos.,"item 1, item 2, item 3, item 4, item 5, user 1, user 2, noti 1, noti 2","with notis as 
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+execution_id,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= current_date() - 3
+AND notification_date < current_date()
+AND sit_site_id in ('MLA')
+AND left(execution_id, 1) in ('0')
+),
+
+matcheo as 
+(
+select
+a.item_id_1, a.item_id_2, a.item_id_3, a.item_id_4, a.item_id_5,
+a.user_id, b.user_id, a.execution_id exe1, b.execution_id exe2,
+
+from notis a left join notis b 
+on a.item_id_1 = b.item_id_1 and a.item_id_2 = b.item_id_2 and a.item_id_3 = b.item_id_3 and a.item_id_4 = b.item_id_4 and a.item_id_5 = b.item_id_5
+and a.user_id <> b.user_id
+)
+
+select * from matcheo
+where exe2 is not null
+limit 1000",Jose
+Open Rate (clicks / users test) por subcampaña. Medidos a partir de Opens.,[varios],"with 
+NOTIF AS (
+        SELECT
+        notification_date,
+        user_timestamp as notif_dttm,
+        sit_site_id as site_id,
+        cus_cust_id as user_id,
+        execution_id,
+        batch_credit,
+        domain_id,
+        item_id_1,
+        item_id_2,
+        item_id_3,
+        item_id_4,
+        item_id_5,
+        batch_type,
+        event_type,
+          case 
+            when left(execution_id,1) in ('2') then 'xsell'
+            when left(execution_id,1) in ('B') then 'buy again'
+            when left(execution_id,1) in ('0', '4', '5', '6', '7', '8', '9') then 'remarketing'
+            else 'otra'
+            end campaign,
+          case 
+            when left(execution_id,1) in ('2') then 'xsell'
+            when left(execution_id,1) in ('B') then 'buy again'
+            when left(execution_id,1) in ('0') then 'remarketing'
+            when left(execution_id,1) in ('4', '5', '6', '7', '8', '9') then 'resend'
+            else 'otra'
+            end subcampaign,
+        FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+        WHERE 1= 1
+        AND notification_date >= current_date() - 30
+        AND notification_date < current_date()
+        and extract (hour from user_timestamp) < 20
+        AND campaign_id IN ('REMARKETING_MANTIKA')
+        AND event_type IN ('open')
+        AND sit_site_id in ('MLA')
+),
+total_sent as
+(
+    select
+    site_id,
+    campaign ,
+    subcampaign,
+    date(notif_dttm) fecha,
+    --extract (hour from notif_dttm) hour,
+    count(distinct case when batch_type='test' then  user_id  end) users_test,
+    count(distinct case when batch_type='cg' then  user_id  end) users_cg
+    from notif
+    where event_type = 'open' --'sent'
+    group by 1,2,3,4--,5
+),
+clicks_atr as (
+    select
+    site,
+    date(notif_dttm) fecha,
+    --extract (hour from notif_dttm) hour,
+          campaign,
+          subcampaign,
+    count(execution_id) clicks,
+    from(
+      select
+      site,
+      pos,
+      c.user_id,
+      c.item_id,
+      c.click_time,
+      c.click_date,
+      l.notif_dttm,
+      campaign,
+      subcampaign,
+      execution_id,
+      rank () over (partition by c.id order by l.notif_dttm desc) as rank_notis
+      from meli-bi-data.SBOX_MANTIKAMARKETING.clicks_report c
+      join notif l
+      on  c.click_time >= l.notif_dttm
+      and date_sub(c.click_time, interval 24 hour) <= l.notif_dttm
+      and c.user_id = cast (l.user_id as string)
+      and c.item_id in (l.item_id_1,l.item_id_2,l.item_id_3,l.item_id_4,l.item_id_5)
+      and c.site = l.site_id
+      and l.event_type = 'open'
+    )
+    where rank_notis = 1
+    group by 1,2,3,4--,5
+)
+select
+  date_trunc(n.fecha, MONTH) month_notif,
+  n.site_id sit_site_id,
+  n.campaign,
+  n.subcampaign,
+  n.fecha notification_date,
+  --n.hour,
+  n.users_test,
+  n.users_cg,
+  c.clicks,
+from  total_sent n
+LEFT JOIN clicks_atr c
+  ON n.fecha = c.fecha
+  --and n.hour = c.hour
+  AND n.site_id = c.site
+  and n.campaign = c.campaign
+  and n.subcampaign = c.subcampaign
+WHERE n.fecha < current_date()
+and n.fecha >= current_date()-30",Nico
+Open Rate (clicks / users test) por subcampaña. Medidos a partir de Sents.,[varios],"with 
+NOTIF AS (
+        SELECT
+        notification_date,
+        user_timestamp as notif_dttm,
+        sit_site_id as site_id,
+        cus_cust_id as user_id,
+        execution_id,
+        batch_credit,
+        domain_id,
+        item_id_1,
+        item_id_2,
+        item_id_3,
+        item_id_4,
+        item_id_5,
+        batch_type,
+        event_type,
+          case 
+            when left(execution_id,1) in ('2') then 'xsell'
+            when left(execution_id,1) in ('B') then 'buy again'
+            when left(execution_id,1) in ('0', '4', '5', '6', '7', '8', '9') then 'remarketing'
+            else 'otra'
+            end campaign,
+          case 
+            when left(execution_id,1) in ('2') then 'xsell'
+            when left(execution_id,1) in ('B') then 'buy again'
+            when left(execution_id,1) in ('0') then 'remarketing'
+            when left(execution_id,1) in ('4', '5', '6', '7', '8', '9') then 'resend'
+            else 'otra'
+            end subcampaign,
+        FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+        WHERE 1= 1
+        AND notification_date >= current_date() - 30
+        AND notification_date < current_date()
+        and extract (hour from user_timestamp) < 20
+        AND campaign_id IN ('REMARKETING_MANTIKA')
+        AND event_type IN ('sent','open')
+        AND sit_site_id in ('MLA')
+),
+total_sent as
+(
+    select
+    site_id,
+    campaign ,
+    subcampaign,
+    date(notif_dttm) fecha,
+    --extract (hour from notif_dttm) hour,
+    count(distinct case when batch_type='test' then  user_id  end) users_test,
+    count(distinct case when batch_type='cg' then  user_id  end) users_cg
+    from notif
+    where event_type = 'sent'
+    group by 1,2,3,4--,5
+),
+clicks_atr as (
+    select
+    site,
+    date(notif_dttm) fecha,
+    --extract (hour from notif_dttm) hour,
+          campaign,
+          subcampaign,
+    count(execution_id) clicks,
+    from(
+      select
+      site,
+      pos,
+      c.user_id,
+      c.item_id,
+      c.click_time,
+      c.click_date,
+      l.notif_dttm,
+      campaign,
+      subcampaign,
+      execution_id,
+      rank () over (partition by c.id order by l.notif_dttm desc) as rank_notis
+      from meli-bi-data.SBOX_MANTIKAMARKETING.clicks_report c
+      join notif l
+      on  c.click_time >= l.notif_dttm
+      and date_sub(c.click_time, interval 24 hour) <= l.notif_dttm
+      and c.user_id = cast (l.user_id as string)
+      and c.item_id in (l.item_id_1,l.item_id_2,l.item_id_3,l.item_id_4,l.item_id_5)
+      and c.site = l.site_id
+      and l.event_type = 'open'
+    )
+    where rank_notis = 1
+    group by 1,2,3,4--,5
+)
+select
+  date_trunc(n.fecha, MONTH) month_notif,
+  n.site_id sit_site_id,
+  n.campaign,
+  n.subcampaign,
+  n.fecha notification_date,
+  --n.hour,
+  n.users_test,
+  n.users_cg,
+  c.clicks,
+from  total_sent n
+LEFT JOIN clicks_atr c
+  ON n.fecha = c.fecha
+  --and n.hour = c.hour
+  AND n.site_id = c.site
+  and n.campaign = c.campaign
+  and n.subcampaign = c.subcampaign
+WHERE n.fecha < current_date()
+and n.fecha >= current_date()-30",Nico
+Mercadoplay: Eventos de nuestro user.,[toda la tracks],"SELECT *
+FROM meli-bi-data.MELIDATA.TRACKS
+WHERE  path like '/mercadoplay%'
+AND ds >= '2023-04-19'
+AND site IN  ('MLA')
+and usr.user_id = '1252535921'
+--AND bu = 'mercadolibre'
+order by user_timestamp asc",Jose
+Mercadoplay: Actividad por site y fecha.,"site, notification_date, users, feeds, played, finished","with meliplay_events as
+(
+  SELECT 
+  site, 
+  date(user_timestamp) notification_date,
+  user_timestamp, 
+  usr.user_id user_id, 
+
+  case 
+  when path in ('/mercadoplay/hub/feed', '/mercadoplay/search/feed') then 'feed' --? '/mercadoplay/vcp/feed'
+  when path like ('/mercadoplay/player/ready') then 'ready'
+  when path in ('/mercadoplay/vcp', '/mercadoplay/vcp/player/playback/start', '/mercadoplay/vcp/player/playback/progress', '/mercadoplay/vcp/player/playback/resume', '/mercadoplay/vcp/player') then 'play'
+  when path in ('/mercadoplay/vcp/player/playback/pause') then 'pause'
+  when  path in ('/mercadoplay/vcp/player/playback/end') then 'finish'
+  else 'other'
+  end event_type,
+  path,
+  event_data,
+  case when path in ('/mercadoplay/hub/feed', '/mercadoplay/vcp/feed', '/mercadoplay/search/feed') then json_extract(event_data,""$.contents_list"") else json_extract(event_data,""$.content_id"") end content,
+
+  FROM meli-bi-data.MELIDATA.TRACKS
+  WHERE path like '/mercadoplay%'
+  AND ds >= '2023-03-01'
+  --AND site IN  ('MLA')
+  --and usr.user_id = '1252535921'
+  AND bu = 'mercadolibre'
+  order by site, notification_date asc
+)
+
+select
+site,
+notification_date,
+count(distinct user_id) users,
+count(distinct case when event_type = 'feed' then content end) feeds,
+count(distinct case when event_type = 'play' then content end) played,
+count(distinct case when event_type = 'finish' then content end) finished,
+from meliplay_events
+group by 1,2 order by 1,2",Jose
+Items notificados vistos sobre opens según strategy.,"site, fecha, experiment, users y sent test y cg, showns, opens, items vistos","with 
+
+NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site,
+cus_cust_id as user,
+--batch_credit,
+batch_type,
+execution_id,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'remarketing'
+WHEN left(execution_id,1) = '2' THEN 'xsell'
+WHEN left(execution_id,1) = 'B' THEN 'buy_again'
+WHEN left(execution_id,1) in ('4', '5', '6', '8') THEN 'resend'
+WHEN left(execution_id,1) = '7' THEN 'resend_xsell'
+WHEN left(execution_id,1) = '9' THEN 'resend_morning'
+ELSE 'error' END  experiment,
+
+CASE WHEN left(execution_id,1) = '0' THEN 'MANTIKA_RMKT'
+WHEN left(execution_id,1) = '2' THEN 'MANTIKA_X-SELL'
+WHEN left(execution_id,1) = 'B' THEN 'MANTIKA_BUY-AGAIN'
+WHEN left(execution_id,1) in ('4', '5', '6', '8') THEN 'MANTIKA_RMKT'
+WHEN left(execution_id,1) = '7' THEN 'MANTIKA_X-SELL'
+WHEN left(execution_id,1) = '9' THEN 'MANTIKA_BUY-AGAIN'
+ELSE 'error' END  strategy,
+
+event_type,
+
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent', 'shown', 'open')
+AND sit_site_id in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+AND notification_date >= '2023-04-20' and notification_date < current_date()
+),
+
+str as (
+SELECT site, usr.user_id user, json_value(platform.fragment,'$.strategy') strat, json_value(event_data,'$.item_id') item, user_timestamp,
+FROM meli-bi-data.MELIDATA.TRACKS as A
+    WHERE  1=1
+        AND ds >= '2023-04-20' and ds < current_date()
+        -- AND json_value(event_data, '$.campaign_id')  LIKE '%MANTIKA%'--, 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
+        -- AND json_value(event_data, '$.campaign_id')  IN ('REMARKETING_MANTIKA', 'REMARKETING_NOTIFICATION', 'REMARKETING_MLD')
+        AND site in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+        --AND usr.user_id = '1021400455'
+        AND bu = 'mercadolibre'
+        and path in ('/pdp', '/vip')
+        and json_value(platform.fragment,'$.strategy') in ('MANTIKA_RMKT', 'MANTIKA_X-SELL', 'MANTIKA_BUY-AGAIN')
+)
+
+select --*
+notif.site, extract(date from notif_dttm) fecha, experiment, 
+count(distinct case when event_type = 'sent' and batch_type = 'test' then notif.user end) users_test,
+count(distinct case when event_type = 'sent' and batch_type = 'cg' then notif.user end) users_cg,
+count(distinct case when event_type = 'sent' and batch_type = 'test' then execution_id end) sent_test,
+count(distinct case when event_type = 'sent' and batch_type = 'cg' then execution_id end) sent_cg,
+count(distinct case when event_type = 'shown' and batch_type = 'test' then execution_id end) shown,
+count(distinct case when event_type = 'open' and batch_type = 'test' then execution_id end) open,
+count(distinct item) items_vistos,
+from notif left join str on notif.site = str.site and cast(notif.user as string) = str.user 
+and notif.strategy = str.strat
+and notif.notif_dttm <= cast(str.user_timestamp as timestamp)
+and notif.notif_dttm >= timestamp_sub(cast(str.user_timestamp as timestamp), interval 8 hour)
+group by 1,2,3",Jose
+Mercadoplay: Creador de la tabla mpl_events.,"site, notification date, user timestamp, user id, content, event type, path, searched query, recommended feed, feed page, event data, id, session","delete from meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events where notification_date >= current_date() - 7;
+insert into meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events 
+
+SELECT 
+site, 
+date(user_timestamp) notification_date,
+user_timestamp, 
+usr.user_id user_id, 
+case when path not in ('/mercadoplay/hub/feed', '/mercadoplay/vcp/feed', '/mercadoplay/search/feed') then json_extract(event_data,""$.content_id"") end content,
+
+case 
+when path in ('/mercadoplay/hub/feed') then 'feed-hub'
+when path in ('/mercadoplay/search') then 'search'
+when path in ('/mercadoplay/search/feed') then 'feed-search'
+when path in ('/mercadoplay/vcp/feed') then 'feed-vcp'
+when path like ('/mercadoplay/player/ready') then 'ready'
+when path in ('/mercadoplay/hub/player/playback/start') then 'preview-start'
+when  path in ('/mercadoplay/hub/player/playback/end') then 'previw-end'
+when path in ('/mercadoplay/vcp') then 'vcp'
+when path in ('/mercadoplay/vcp/player') then 'player'
+when path in ('/mercadoplay/vcp/player/playback/start') then 'start'
+when path in ('/mercadoplay/vcp/player/playback/progress') then 'progress'
+when path in ('/mercadoplay/vcp/player/playback/pause') then 'pause'
+when path in ('/mercadoplay/vcp/player/playback/resume') then 'resume'
+when  path in ('/mercadoplay/vcp/player/playback/end') then 'end'
+else 'other'
+end event_type,
+path,
+case when path in ('/mercadoplay/search') then json_extract(event_data,""$.query"") end searched_query,
+case when path in ('/mercadoplay/hub/feed', '/mercadoplay/vcp/feed', '/mercadoplay/search/feed') then json_extract(event_data,""$.contents_list"") end recommended_feed,
+case when path in ('/mercadoplay/hub/feed', '/mercadoplay/vcp/feed', '/mercadoplay/search/feed') then json_extract(event_data,""$.page"") end feed_page,
+event_data,
+id,
+json_extract(event_data,""$.playback_session_id"") session,
+
+FROM meli-bi-data.MELIDATA.TRACKS
+WHERE path --like '/mercadoplay%'
+in (
+'/mercadoplay/hub/feed',
+'/mercadoplay/search',
+'/mercadoplay/search/feed',
+'/mercadoplay/vcp/feed',
+'/mercadoplay/player/ready',
+'/mercadoplay/hub/player/playback/start',
+'/mercadoplay/hub/player/playback/end',
+'/mercadoplay/vcp',
+'/mercadoplay/vcp/player',
+'/mercadoplay/vcp/player/playback/start',
+'/mercadoplay/vcp/player/playback/progress',
+'/mercadoplay/vcp/player/playback/pause',
+'/mercadoplay/vcp/player/playback/resume',
+'/mercadoplay/vcp/player/playback/end'
+)
+AND ds >= current_date() - 7
+AND site IN  ('MLA', 'MLB', 'MLM', 'MLC', 'MCO', 'MLU', 'MPE')
+--and usr.user_id = '1252535921'
+AND bu = 'mercadolibre'
+--order by site, notification_date asc
+
+;",Jose
+Mercadoplay: Creador de la tabla mpl_metrics.,"site, notification date, platform, feeded, searcher, previewer, player, non finisher and finisher users, feeds, searches, previews, content playes, content leaved and finished,  different, TVM, minues on platform and minutes to play, by session, by user","drop table meli-bi-data.SBOX_MANTIKAMARKETING.mpl_metrics;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.mpl_metrics as
+
+select 
+
+q.*, 
+
+minutes_on_platform_users, minutes_on_platform_players, minutes_to_play_s, minutes_to_play,
+minutes_on_platform_users_by_user, minutes_on_platform_players_by_user, minutes_to_play_by_user, minutes_to_play_by_user_s,
+
+diff_feeds_by_user, diff_searches_by_user, diff_previews_by_user, diff_content_played_by_user, diff_content_leaved_by_user, diff_content_finished_by_user, 
+feeds_to_play_by_user,
+TVM_by_user,
+
+from
+(
+select
+site, notification_date,
+
+count(distinct user_id) platform_users,
+
+count(distinct case when event_type in ('feed-hub', 'feed-search', 'feed-vcp') then user_id end) feeded_users,
+count(distinct case when event_type in ('search') then user_id end) searcher_users,
+count(distinct case when event_type in ('preview-start', 'preview-end') then user_id end) previewer_users,
+count(distinct case when event_type in ('start', 'progress', 'resume') then user_id end) player_users,
+count(distinct case when event_type in ('start', 'progress', 'resume') then user_id end) - count(distinct case when event_type in ('end') then user_id end) non_finisher_users,
+count(distinct case when event_type in ('end') then user_id end) finisher_users,
+
+count(distinct case when event_type in ('feed-hub', 'feed-search', 'feed-vcp') then concat(recommended_feed, id) end) feeds,
+count(distinct case when event_type in ('search') then concat(searched_query, id) end) searches,
+count(distinct case when event_type in ('preview-start', 'preview-end') then concat(content, session) end) previews,
+count(distinct case when event_type in ('start', 'progress', 'resume') then concat(content, session) end) content_played,
+count(distinct case when event_type in ('start', 'progress', 'resume') then concat(content, session) end) - count(distinct case when event_type in ('end') then concat(content, session) end) content_leaved,
+count(distinct case when event_type in ('end') then concat(content, session) end) content_finished,
+
+count(distinct case when event_type in ('feed-hub', 'feed-search', 'feed-vcp') then recommended_feed end) diff_feeds,
+count(distinct case when event_type in ('search') then searched_query end) diff_searches,
+count(distinct case when event_type in ('preview-start', 'preview-end') then content end) diff_previews,
+count(distinct case when event_type in ('start', 'progress', 'resume') then content end) diff_content_played,
+count(distinct case when event_type in ('start', 'progress', 'resume') then content end) - count(distinct case when event_type in ('end') then content end) diff_content_leaved,
+count(distinct case when event_type in ('end') then content end) diff_content_finished,
+
+count(distinct case when event_type in ('progress') then id end) / 2 TVM,
+
+from meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events
+group by 1,2
+) q
+
+left join
+(
+select site, notification_date,
+avg(case when diff_feeds_by_user > 0 then diff_feeds_by_user end) diff_feeds_by_user,
+avg(case when diff_searches_by_user > 0 then diff_searches_by_user end) diff_searches_by_user,
+avg(case when diff_previews_by_user > 0 then diff_previews_by_user end) diff_previews_by_user,
+avg(case when diff_content_played_by_user > 0 then diff_content_played_by_user end) diff_content_played_by_user,
+avg(case when diff_content_leaved_by_user > 0 then diff_content_leaved_by_user end) diff_content_leaved_by_user,
+avg(case when diff_content_finished_by_user > 0 then diff_content_finished_by_user end) diff_content_finished_by_user,
+avg(case when f2p > 0 then f2p end) feeds_to_play_by_user,
+avg(case when TVM_by_user > 0 then minutes_to_play_by_user end) minutes_to_play_by_user,
+sum(case when TVM_by_user > 0 then minutes_to_play_by_user end) minutes_to_play,
+avg(case when TVM_by_user > 0 then TVM_by_user end) TVM_by_user,
+
+from (
+select
+site, notification_date, user_id,
+
+count(distinct case when event_type in ('feed-hub', 'feed-search', 'feed-vcp') then recommended_feed end) diff_feeds_by_user,
+count(distinct case when event_type in ('search') then searched_query end) diff_searches_by_user,
+count(distinct case when event_type in ('preview-start', 'preview-end') then content end) diff_previews_by_user,
+count(distinct case when event_type in ('start', 'progress', 'resume') then content end) diff_content_played_by_user,
+count(distinct case when event_type in ('start', 'progress', 'resume') then content end) - count(distinct case when event_type in ('end') then content end) diff_content_leaved_by_user,
+count(distinct case when event_type in ('end') then content end) diff_content_finished_by_user,
+safe_divide(count(case when event_type in ('feed-hub', 'feed-search', 'feed-vcp') then recommended_feed end), count(case when event_type in ('start', 'resume') then content end)) f2p,
+timestamp_diff(min(case when event_type in ('start', 'progress', 'resume') then cast(user_timestamp as timestamp) end), min(cast(user_timestamp as timestamp)), minute) minutes_to_play_by_user,
+
+count(distinct case when event_type in ('progress') then id end) / 2 TVM_by_user,
+el
+from meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events
+group by 1,2,3
+)
+group by 1,2
+) us on q.site = us.site and q.notification_date = us.notification_date
+
+left join
+(
+select 
+site, notification_date,
+avg(minutes_on_platform_by_user) minutes_on_platform_users_by_user,
+avg(case when TVM_by_user > 0 then minutes_on_platform_by_user end) minutes_on_platform_players_by_user,
+avg(case when TVM_by_user > 0 then minutes_to_play_by_user end) minutes_to_play_by_user_s,
+sum(minutes_on_platform_by_user) minutes_on_platform_users,
+sum(case when TVM_by_user > 0 then minutes_on_platform_by_user end) minutes_on_platform_players,
+sum(case when TVM_by_user > 0 then minutes_to_play_by_user end) minutes_to_play_s,
+
+from (
+select
+site, notification_date, user_id, session,
+
+count(distinct case when event_type in ('progress') then id end) / 2 TVM_by_user,
+timestamp_diff(min(case when event_type in ('start', 'progress', 'resume') then cast(user_timestamp as timestamp) end), min(cast(user_timestamp as timestamp)), minute) minutes_to_play_by_user,
+timestamp_diff(max(cast(user_timestamp as timestamp)), min(cast(user_timestamp as timestamp)), minute) minutes_on_platform_by_user,
+
+
+from meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events
+group by 1,2,3,4
+)
+group by 1,2
+) mop on q.site = mop.site and q.notification_date = mop.notification_date
+
+;",Jose
+Mercadoplay: Creador de la tabla mpl_repro.,"notification date, site, repro days, sum and count, repro days min, repro days 25, repro days 50, repro days 75, repro days max, ","drop table meli-bi-data.SBOX_MANTIKAMARKETING.mpl_repro;
+create table meli-bi-data.SBOX_MANTIKAMARKETING.mpl_repro as
+
+select
+notification_date,
+site,
+avg(repro_days) repro_days,
+sum(repro_days) repro_days_sum,
+count(repro_days) repro_days_count,
+approx_quantiles(repro_days, 4) [OFFSET(0)] repro_days_min,
+approx_quantiles(repro_days, 4) [OFFSET(1)] repro_days_25,
+approx_quantiles(repro_days, 4) [OFFSET(2)] repro_days_50,
+approx_quantiles(repro_days, 4) [OFFSET(3)] repro_days_75,
+approx_quantiles(repro_days, 4) [OFFSET(4)] repro_days_max,
+
+from (
+select
+notification_date - extract(day from notification_date) +1 notification_date, 
+site,
+user_id,
+
+count(distinct case when event_type in ('start', 'progress', 'resume') then notification_date end) repro_days,
+
+from meli-bi-data.SBOX_MANTIKAMARKETING.mpl_events
+group by 1,2,3
+)
+group by 1,2",Jose
+"Buy Again: Query para sacar dominios, dominios sin compra same domain en 4 dias post notificación.","campaign, domain, users, buyers, orders","with ORDERS as
+(
+SELECT cus_cust_id AS user_id, 
+-- ord_created_dttm esta sin timezone pero con horario de -4 (le sumamos 4 para corregir)
+DATE_ADD(tim_day_winning_time, INTERVAL 4 HOUR) AS FECHA_ORDER, 
+SIT_SITE_ID as site_id,
+ ord_order_id AS order_id, 
+ item_id,
+ domain_id,
+ GMV_USD,
+ product_id,
+ PARENT_ID,
+FROM  meli-bi-data.SBOX_MANTIKAMARKETING.bids_marketing_reports
+WHERE 1=1
+AND tim_day_winning_date >= '2022-10-01'
+AND tim_day_winning_date < '2023-05-03'
+AND SIT_SITE_ID in ('MLM','MLB', 'MLA','MLC','MCO','MLU','MPE')
+)
+,NOTIF AS
+(
+SELECT
+DATE_ADD(user_timestamp, INTERVAL 4 HOUR) as notif_dttm,
+sit_site_id as site_id,
+cus_cust_id as user_id,
+campaign_id campaign,
+batch_credit,
+domain_id,
+item_id_1,
+item_id_2,
+item_id_3,
+item_id_4,
+item_id_5,
+PRODUCT_ID_1,
+PRODUCT_ID_2,
+PRODUCT_ID_3,
+PRODUCT_ID_4,
+PRODUCT_ID_5,
+PARENT_ID_1,
+PARENT_ID_2,
+PARENT_ID_3,
+PARENT_ID_4,
+PARENT_ID_5,
+
+batch_type,
+CASE WHEN left(execution_id,1) = '2' THEN 'xsell'
+    WHEN left(execution_id,1) = '4' THEN 'resend_1'
+    WHEN left(execution_id,1) = '6' THEN 'resend_10'
+    ELSE
+    CASE WHEN experiment = '7' then 'v17' 
+        WHEN experiment = '9' THEN 'resend_1'
+        WHEN experiment IN ('B', 'D', '8') THEN 'remove_v6'                      
+        WHEN experiment IN ('A', 'B') THEN 'reorder_with_redis'
+        WHEN experiment IN ('C', 'D') THEN 'reorder_with_postgres'
+        WHEN experiment = 'E' THEN 'v19'
+        WHEN experiment = 'F' THEN 'resend_10'
+        ELSE 'v6' END END  experiment,
+
+CASE WHEN left(execution_id,1) = '2' THEN 'xsell'
+    WHEN left(execution_id,1) in ('4', '6', '7', '8', '5', '9') THEN 'resend'
+    ELSE 
+    CASE WHEN experiment = '9' then 'resend'
+        WHEN experiment = 'F' THEN 'resend'
+        ELSE 'remarketing' END END  experiment_type,
+
+FROM meli-bi-data.SBOX_MANTIKAMARKETING.full_users_mtk_reports as A
+WHERE 1= 1
+AND campaign_id = 'REMARKETING_MANTIKA'
+AND event_type IN ('sent') --, 'shown', 'open')
+AND notification_date >= '2022-10-01'
+AND notification_date < '2023-05-01'
+AND sit_site_id in ('MLM','MLB', 'MLA')--,'MLC','MCO','MLU','MPE')
+AND left(execution_id, 1) in ('B')
+AND notification_date >= '2022-09-01'
+),
+orders_atribuidas AS
+(
+SELECT order_id, fecha_order, buyer_id, site_id, campaign, batch_type, notif_2_day, gmv_usd, domain_id, --experiment
+FROM (
+SELECT
+o.order_id,
+o.fecha_order,
+o.user_id as buyer_id,
+o.site_id,
+o.gmv_usd,
+n.campaign,
+n.domain_id,
+n.batch_type,
+-- n.xsell_divider,
+--n.experiment experiment,
+n.notif_dttm notif_2_day,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR)) THEN n.notif_dttm END notif_24,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 1 HOUR)) THEN n.notif_dttm END notif_1,
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) AND n.domain_id = o.domain_id) THEN n.notif_dttm END notif_24_domain,
+
+CASE WHEN (n.notif_dttm < o.FECHA_ORDER AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 24 HOUR) 
+                AND (o.item_id IN (n.item_id_1, n.item_id_2, n.item_id_3, n.item_id_4, n.item_id_5))) THEN n.notif_dttm END notif_24_items,
+
+
+
+RANK() OVER (PARTITION BY o.ORDER_ID ORDER BY n.notif_dttm DESC) AS ORDEN_2
+FROM orders o
+right JOIN notif n
+ON n.user_id = o.user_id
+and n.site_id = o.site_id
+AND n.domain_id = o.domain_id  
+AND n.notif_dttm >= DATE_SUB(o.FECHA_ORDER, INTERVAL 96 hour)
+AND n.notif_dttm < o.FECHA_ORDER
+)
+WHERE ORDEN_2 = 1
+)
+,total_orders_atribuidas as
+ (
+select
+-- site_id,
+campaign,
+--experiment,
+-- xsell_divider,
+-- batch_credit,
+-- extract(HOUR FROM notif_2_day) hora,
+ split(domain_id,'-')[offset(1)] domain_id ,
+ -- 2 Days
+count(distinct buyer_id) buyers,
+-- count(distinct case when batch_type='test' then  order_id  end) orders_2day_test,
+count(  order_id) orders,
+-- 24 hours
+
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_test_24,
+-- count(distinct case when batch_type='test' AND notif_24 IS NOT NULL  then  order_id  end) orders_test_24,
+-- sum(case when batch_type='test' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_test_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  buyer_id  end) buyers_cg_2,
+-- count(distinct case when batch_type='cg' AND notif_24 IS NOT NULL  then  order_id  end) orders_cg_2,
+-- sum(case when batch_type='cg' AND notif_24 IS NOT NULL  then gmv_usd end) gmv_cg,
+
+-- 24 hours same domain
+
+
+
+
+from  orders_atribuidas
+
+where notif_2_day is not null -- solo orders atribuidas
+group by 1,2--,3--,4--, 5
+)
+,
+
+total_sent as
+(
+select
+-- site_id,
+campaign ,
+--batch_credit,
+ split(domain_id,'-')[offset(1)] domain_id,
+count(distinct user_id  ) users,
+-- count(distinct case when batch_type='cg' then  user_id  end) users_cg
+from notif
+group by 1,2--,3--,4
+)
+select
+
+-- n.site_id sit_site_id,
+n.campaign campaign_id,
+n.domain_id,
+--o.batch_Credit,
+users,
+buyers,
+orders,
+
+from total_orders_atribuidas o 
+right join total_sent n on --o.site_id=n.site_id and 
+o.campaign=n.campaign and o.domain_id=n.domain_id -- AND o.batch_credit = n.batch_credit",Clari
